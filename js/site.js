@@ -57,12 +57,7 @@ function formatMatchDate(meta) {
 function outcomeForPlayer(match, riotName, riotTag) {
     const players = match && match.players && match.players.all_players;
     if (!Array.isArray(players)) return null;
-    const me = players.find(
-        (p) =>
-            p &&
-            String(p.name).toLowerCase() === riotName.toLowerCase() &&
-            String(p.tag).toLowerCase() === riotTag.toLowerCase()
-    );
+    const me = findPlayerInMatch(match, riotName, riotTag);
     if (!me || !me.team) return null;
     const key = String(me.team).toLowerCase();
     const myTeam = match.teams && match.teams[key];
@@ -82,6 +77,45 @@ function outcomeForPlayer(match, riotName, riotTag) {
     return null;
 }
 
+function findPlayerInMatch(match, riotName, riotTag) {
+    const players = match && match.players && match.players.all_players;
+    if (!Array.isArray(players)) return null;
+    return (
+        players.find(
+            (p) =>
+                p &&
+                String(p.name).toLowerCase() === String(riotName).toLowerCase() &&
+                String(p.tag).toLowerCase() === String(riotTag).toLowerCase()
+        ) || null
+    );
+}
+
+function firstNumericFromKeys(obj, keys) {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const key of keys) {
+        if (!(key in obj)) continue;
+        const raw = obj[key];
+        if (raw === null || raw === undefined || raw === '') continue;
+        const n = Number(raw);
+        if (Number.isFinite(n)) return n;
+    }
+    return null;
+}
+
+function ratingDeltaForPlayer(match, riotName, riotTag) {
+    const me = findPlayerInMatch(match, riotName, riotTag);
+    if (!me) return null;
+
+    // Handle common field naming across different match payload versions.
+    const before = firstNumericFromKeys(me, ['mmr_before', 'ranked_rating_before']);
+    const after = firstNumericFromKeys(me, ['mmr_after', 'ranked_rating_after']);
+    if (before !== null && after !== null) {
+        return Math.round(after - before);
+    }
+
+    return firstNumericFromKeys(me, ['mmr_change_to_last_game', 'ranked_rating_change']);
+}
+
 function playerKeyJs(name, tag) {
     return `${String(name).toLowerCase()}#${String(tag).toLowerCase()}`;
 }
@@ -95,6 +129,7 @@ function isCompetitiveMode(mode) {
 function renderRosterMatchRow(entry, selectedKeys) {
     const match = entry.match;
     const roster = entry.roster || [];
+    const rrByPlayer = (entry && entry.rrByPlayer) || {};
     let primary = roster[0] || { name: '', tag: '' };
     if (selectedKeys && selectedKeys.size > 0) {
         const prefer = roster.find((r) => selectedKeys.has(playerKeyJs(r.name, r.tag)));
@@ -104,16 +139,32 @@ function renderRosterMatchRow(entry, selectedKeys) {
         .filter((r) => !selectedKeys || selectedKeys.size === 0 || selectedKeys.has(playerKeyJs(r.name, r.tag)))
         .map((r) => `${r.name}#${r.tag}`)
         .join(' · ');
-    return renderMatchRow(match, primary.name, primary.tag, rosterLine);
+    const rrOverride = rrByPlayer[playerKeyJs(primary.name, primary.tag)];
+    return renderMatchRow(match, primary.name, primary.tag, rosterLine, rrOverride);
 }
 
-function renderMatchRow(match, riotName, riotTag, rosterLine = '') {
+function renderMatchRow(match, riotName, riotTag, rosterLine = '', rrOverride = null) {
     const meta = match.metadata || {};
     const mapName = meta.map || 'Unknown map';
     const mode = meta.mode || 'Unknown mode';
     const red = (match.teams && match.teams.red && match.teams.red.rounds_won) ?? '—';
     const blue = (match.teams && match.teams.blue && match.teams.blue.rounds_won) ?? '—';
     const outcome = outcomeForPlayer(match, riotName, riotTag);
+    const rrDelta = Number.isFinite(Number(rrOverride)) ? Number(rrOverride) : ratingDeltaForPlayer(match, riotName, riotTag);
+    let rrClass = 'match-rating-change--unknown';
+    let rrLabel = 'RR —';
+    if (rrDelta !== null) {
+        if (rrDelta > 0) {
+            rrClass = 'match-rating-change--gain';
+            rrLabel = `RR +${rrDelta}`;
+        } else if (rrDelta < 0) {
+            rrClass = 'match-rating-change--loss';
+            rrLabel = `RR ${rrDelta}`;
+        } else {
+            rrClass = 'match-rating-change--even';
+            rrLabel = 'RR +0';
+        }
+    }
     let resultClass = 'match-result--upcoming';
     let resultLabel = 'Draw';
     if (outcome === 'win') {
@@ -139,6 +190,7 @@ function renderMatchRow(match, riotName, riotTag, rosterLine = '') {
             <h3>${escapeHtml(mapName)}</h3>
             <p class="match-meta">${metaText}</p>
             <p class="match-scoreline">Red ${escapeHtml(String(red))} – ${escapeHtml(String(blue))} Blue</p>
+            <p class="match-rating-change ${rrClass}">${escapeHtml(rrLabel)}</p>
         </div>
         <span class="match-result ${resultClass}">${escapeHtml(resultLabel)}</span>
     `;

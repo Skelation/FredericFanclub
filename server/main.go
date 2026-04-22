@@ -8,12 +8,14 @@ import (
 	"os"
 	"strings"
 	"time"
+	"fmt"
 )
 
 func main() {
 	loadDotEnv()
 
 	base := strings.TrimSuffix(strings.TrimSpace(os.Getenv("VALORANT_API_BASE")), "/")
+	fmt.Println(os.Getenv("VALORANT_API_KEY"))
 	if base == "" {
 		base = "https://api.henrikdev.xyz/valorant"
 	}

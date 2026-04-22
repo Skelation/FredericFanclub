@@ -696,6 +696,29 @@ footer {
     margin-top: 4px;
 }
 
+.match-rating-change {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 13px;
+    letter-spacing: 1px;
+    margin-top: 6px;
+}
+
+.match-rating-change--gain {
+    color: var(--electric-green);
+}
+
+.match-rating-change--loss {
+    color: #ff6b6b;
+}
+
+.match-rating-change--even {
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.match-rating-change--unknown {
+    color: rgba(255, 255, 255, 0.5);
+}
+
 .match-result {
     font-family: 'Orbitron', sans-serif;
     font-size: 13px;

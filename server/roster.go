@@ -24,8 +24,9 @@ type riotPlayer struct {
 }
 
 type rosterMatchOut struct {
-	Match  json.RawMessage `json:"match"`
-	Roster []riotPlayer    `json:"roster"`
+	Match      json.RawMessage  `json:"match"`
+	Roster     []riotPlayer     `json:"roster"`
+	RRByPlayer map[string]int64 `json:"rrByPlayer,omitempty"`
 }
 
 type playerResume struct {
@@ -50,8 +51,9 @@ type rosterContinueRequest struct {
 }
 
 type aggEntry struct {
-	match   json.RawMessage
-	playerK map[string]riotPlayer
+	match      json.RawMessage
+	playerK    map[string]riotPlayer
+	rrByPlayer map[string]int64
 }
 
 func loadDotEnv() {
@@ -110,7 +112,7 @@ func defaultRosterPlayers() []riotPlayer {
 		{Name: "Lal6s9gne", Tag: "6641"},
 		{Name: "Djibはコリーヌ お あいして", Tag: "LOVE"},
 		{Name: "hhj", Tag: "8769"},
-
+		{Name: "小胖子vincent", Tag: "4397"},
 	}
 }
 
@@ -195,6 +197,57 @@ func parseHenrikMatchList(body []byte) ([]json.RawMessage, error) {
 	return outer.Data, nil
 }
 
+func fetchPlayerMMRHistory(ctx context.Context, base, region, apiKey string, p riotPlayer) (map[string]int64, string) {
+	u := base + "/v1/mmr-history/" + url.PathEscape(region) + "/" + url.PathEscape(p.Name) + "/" + url.PathEscape(p.Tag)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Sprintf("%s#%s: %v", p.Name, p.Tag, err)
+	}
+	if apiKey != "" {
+		req.Header.Set("Authorization", apiKey)
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Sprintf("%s#%s: %v", p.Name, p.Tag, err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Sprintf("%s#%s: %v", p.Name, p.Tag, err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Sprintf("%s#%s: mmr-history HTTP %d", p.Name, p.Tag, resp.StatusCode)
+	}
+	var outer struct {
+		Status int `json:"status"`
+		Data   []struct {
+			MatchID     string `json:"match_id"`
+			MMRChange   int64  `json:"mmr_change_to_last_game"`
+			RankedDelta int64  `json:"ranked_rating_change"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(body, &outer); err != nil {
+		return nil, fmt.Sprintf("%s#%s: mmr-history decode: %v", p.Name, p.Tag, err)
+	}
+	if outer.Status != 200 {
+		return nil, fmt.Sprintf("%s#%s: mmr-history status %d", p.Name, p.Tag, outer.Status)
+	}
+	out := make(map[string]int64, len(outer.Data))
+	for _, row := range outer.Data {
+		id := strings.TrimSpace(row.MatchID)
+		if id == "" {
+			continue
+		}
+		delta := row.MMRChange
+		if delta == 0 && row.RankedDelta != 0 {
+			delta = row.RankedDelta
+		}
+		out[id] = delta
+	}
+	return out, ""
+}
+
 func envInt(key string, def int) int {
 	s := strings.TrimSpace(os.Getenv(key))
 	if s == "" {
@@ -270,7 +323,8 @@ func fetchPlayerCompetitivePages(
 	return collected, start, false, ""
 }
 
-func mergeMatchesIntoAgg(agg map[string]*aggEntry, p riotPlayer, matches []json.RawMessage, noID *int) {
+func mergeMatchesIntoAgg(agg map[string]*aggEntry, p riotPlayer, matches []json.RawMessage, rrByMatchID map[string]int64, noID *int) {
+	pk := playerKey(p.Name, p.Tag)
 	for _, m := range matches {
 		id := matchIDFromJSON(m)
 		if id == "" {
@@ -280,12 +334,18 @@ func mergeMatchesIntoAgg(agg map[string]*aggEntry, p riotPlayer, matches []json.
 		e := agg[id]
 		if e == nil {
 			e = &aggEntry{
-				match:   m,
-				playerK: make(map[string]riotPlayer),
+				match:      m,
+				playerK:    make(map[string]riotPlayer),
+				rrByPlayer: make(map[string]int64),
 			}
 			agg[id] = e
 		}
-		e.playerK[playerKey(p.Name, p.Tag)] = riotPlayer{Name: p.Name, Tag: p.Tag}
+		e.playerK[pk] = riotPlayer{Name: p.Name, Tag: p.Tag}
+		if rrByMatchID != nil {
+			if delta, ok := rrByMatchID[id]; ok {
+				e.rrByPlayer[pk] = delta
+			}
+		}
 	}
 }
 
@@ -302,7 +362,7 @@ func aggToSortedRoster(agg map[string]*aggEntry) []rosterMatchOut {
 			}
 			return strings.ToLower(rst[i].Name) < strings.ToLower(rst[j].Name)
 		})
-		out = append(out, rosterMatchOut{Match: e.match, Roster: rst})
+		out = append(out, rosterMatchOut{Match: e.match, Roster: rst, RRByPlayer: e.rrByPlayer})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return matchStartMs(out[i].Match) > matchStartMs(out[j].Match)
@@ -338,11 +398,15 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 	resume := make([]playerResume, 0, len(players))
 
 	for _, p := range players {
+		rrByMatchID, rrWarn := fetchPlayerMMRHistory(r.Context(), base, region, apiKey, p)
+		if rrWarn != "" {
+			warnings = append(warnings, rrWarn)
+		}
 		matches, next, exhausted, w := fetchPlayerCompetitivePages(r.Context(), base, matchPath, region, platform, apiKey, p, 0, initialPages)
 		if w != "" {
 			warnings = append(warnings, w)
 		}
-		mergeMatchesIntoAgg(agg, p, matches, &noID)
+		mergeMatchesIntoAgg(agg, p, matches, rrByMatchID, &noID)
 		resume = append(resume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
 	}
 
@@ -409,11 +473,15 @@ func handleRosterMatchesMore(w http.ResponseWriter, r *http.Request, allowed []s
 			continue
 		}
 		p := riotPlayer{Name: pr.Name, Tag: pr.Tag}
+		rrByMatchID, rrWarn := fetchPlayerMMRHistory(r.Context(), base, region, apiKey, p)
+		if rrWarn != "" {
+			warnings = append(warnings, rrWarn)
+		}
 		matches, next, exhausted, w := fetchPlayerCompetitivePages(r.Context(), base, matchPath, region, platform, apiKey, p, pr.NextStart, loadMorePages)
 		if w != "" {
 			warnings = append(warnings, w)
 		}
-		mergeMatchesIntoAgg(deltaAgg, p, matches, &noID)
+		mergeMatchesIntoAgg(deltaAgg, p, matches, rrByMatchID, &noID)
 		newResume = append(newResume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
 	}
 
