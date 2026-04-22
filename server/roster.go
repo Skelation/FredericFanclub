@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -55,6 +56,13 @@ type aggEntry struct {
 	playerK    map[string]riotPlayer
 	rrByPlayer map[string]int64
 }
+
+type rosterCacheEnvelope struct {
+	SavedAtUnix int64             `json:"savedAtUnix"`
+	Response    rosterAPIResponse `json:"response"`
+}
+
+var rosterCacheMu sync.Mutex
 
 func loadDotEnv() {
 	wd, err := os.Getwd()
@@ -113,6 +121,7 @@ func defaultRosterPlayers() []riotPlayer {
 		{Name: "Djibはコリーヌ お あいして", Tag: "LOVE"},
 		{Name: "hhj", Tag: "8769"},
 		{Name: "小胖子vincent", Tag: "4397"},
+		{Name: "XTrixツ", Tag: "DREAM"},
 	}
 }
 
@@ -260,6 +269,79 @@ func envInt(key string, def int) int {
 	return n
 }
 
+func cacheFilePath() string {
+	p := strings.TrimSpace(os.Getenv("VALORANT_ROSTER_CACHE_FILE"))
+	if p != "" {
+		return p
+	}
+	return filepath.Join("cache", "roster_matches.json")
+}
+
+func cacheTTL() time.Duration {
+	secs := envInt("VALORANT_ROSTER_CACHE_TTL_SECONDS", 300)
+	return time.Duration(secs) * time.Second
+}
+
+func readRosterCache(path string) (*rosterCacheEnvelope, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var e rosterCacheEnvelope
+	if err := json.Unmarshal(b, &e); err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func writeRosterCache(path string, resp rosterAPIResponse) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	e := rosterCacheEnvelope{
+		SavedAtUnix: time.Now().Unix(),
+		Response:    resp,
+	}
+	b, err := json.Marshal(e)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, b, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+func buildRosterResponse(ctx context.Context, base, matchPath, apiKey, region, platform string, players []riotPlayer, initialPages int) rosterAPIResponse {
+	agg := make(map[string]*aggEntry)
+	warnings := make([]string, 0)
+	noID := 0
+	resume := make([]playerResume, 0, len(players))
+
+	for _, p := range players {
+		rrByMatchID, rrWarn := fetchPlayerMMRHistory(ctx, base, region, apiKey, p)
+		if rrWarn != "" {
+			warnings = append(warnings, rrWarn)
+		}
+		matches, next, exhausted, w := fetchPlayerCompetitivePages(ctx, base, matchPath, region, platform, apiKey, p, 0, initialPages)
+		if w != "" {
+			warnings = append(warnings, w)
+		}
+		mergeMatchesIntoAgg(agg, p, matches, rrByMatchID, &noID)
+		resume = append(resume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
+	}
+
+	out := aggToSortedRoster(agg)
+	return rosterAPIResponse{
+		Data:     out,
+		Players:  players,
+		Warnings: warnings,
+		Resume:   resume,
+		HasMore:  computeHasMore(resume),
+	}
+}
+
 // Fetches up to maxPages of competitive mode matches (size 10 each). Returns deduped matches for this player, next API start offset, exhausted, optional warning.
 func fetchPlayerCompetitivePages(
 	ctx context.Context,
@@ -391,32 +473,26 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 	}
 	players := parsePlayersList(os.Getenv("VALORANT_PLAYERS"))
 	initialPages := envInt("VALORANT_ROSTER_INITIAL_PAGES", 3)
+	cachePath := cacheFilePath()
+	ttl := cacheTTL()
 
-	agg := make(map[string]*aggEntry)
-	warnings := make([]string, 0)
-	noID := 0
-	resume := make([]playerResume, 0, len(players))
+	rosterCacheMu.Lock()
+	defer rosterCacheMu.Unlock()
 
-	for _, p := range players {
-		rrByMatchID, rrWarn := fetchPlayerMMRHistory(r.Context(), base, region, apiKey, p)
-		if rrWarn != "" {
-			warnings = append(warnings, rrWarn)
+	if cached, err := readRosterCache(cachePath); err == nil {
+		age := time.Since(time.Unix(cached.SavedAtUnix, 0))
+		if age >= 0 && age <= ttl {
+			w.Header().Set("Content-Type", "application/json")
+			enc := json.NewEncoder(w)
+			enc.SetEscapeHTML(true)
+			_ = enc.Encode(cached.Response)
+			return
 		}
-		matches, next, exhausted, w := fetchPlayerCompetitivePages(r.Context(), base, matchPath, region, platform, apiKey, p, 0, initialPages)
-		if w != "" {
-			warnings = append(warnings, w)
-		}
-		mergeMatchesIntoAgg(agg, p, matches, rrByMatchID, &noID)
-		resume = append(resume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
 	}
 
-	out := aggToSortedRoster(agg)
-	resp := rosterAPIResponse{
-		Data:     out,
-		Players:  players,
-		Warnings: warnings,
-		Resume:   resume,
-		HasMore:  computeHasMore(resume),
+	resp := buildRosterResponse(r.Context(), base, matchPath, apiKey, region, platform, players, initialPages)
+	if err := writeRosterCache(cachePath, resp); err != nil {
+		log.Printf("roster cache write failed: %v", err)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)

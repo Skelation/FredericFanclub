@@ -338,6 +338,11 @@ nav .container {
     backdrop-filter: blur(10px);
 }
 
+.player-card-link {
+    text-decoration: none;
+    color: inherit;
+}
+
 .player-card::before {
     content: '';
     position: absolute;
@@ -362,6 +367,11 @@ nav .container {
     opacity: 1;
 }
 
+.player-card-link:focus-visible {
+    outline: 3px solid var(--primary-blue);
+    outline-offset: 4px;
+}
+
 .player-visual {
     width: 100%;
     height: 220px;
@@ -371,6 +381,14 @@ nav .container {
     position: relative;
     overflow: hidden;
     transition: transform 0.4s;
+}
+
+.player-photo {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .player-initials {
@@ -668,21 +686,44 @@ footer {
     transform: translateY(-2px);
 }
 
-.match-date {
+.match-player-avatar {
+    width: 76px;
+    height: 76px;
+    border-radius: 14px;
+    border: 2px solid rgba(0, 212, 255, 0.35);
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+    display: grid;
+    place-items: center;
+    color: rgba(255, 255, 255, 0.85);
     font-family: 'Orbitron', sans-serif;
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--accent-cyan);
-    letter-spacing: 2px;
-    min-width: 88px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.match-player-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.match-player-avatar--fallback {
+    font-size: 28px;
 }
 
 .match-main h3 {
     font-family: 'Orbitron', sans-serif;
-    font-size: 20px;
+    font-size: 22px;
     color: #fff;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     letter-spacing: 1px;
+}
+
+.match-player {
+    font-size: 16px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
 }
 
 .match-meta {
@@ -691,16 +732,17 @@ footer {
 }
 
 .match-scoreline {
-    font-size: 15px;
-    color: rgba(255, 255, 255, 0.75);
-    margin-top: 4px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 17px;
+    color: rgba(255, 255, 255, 0.92);
+    margin-top: 6px;
 }
 
 .match-rating-change {
     font-family: 'Orbitron', sans-serif;
     font-size: 13px;
     letter-spacing: 1px;
-    margin-top: 6px;
+    margin-top: 8px;
 }
 
 .match-rating-change--gain {
@@ -721,7 +763,7 @@ footer {
 
 .match-result {
     font-family: 'Orbitron', sans-serif;
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 2px;
@@ -761,6 +803,95 @@ footer {
 
 .match-fetch-status--error {
     color: #ff9b9b;
+}
+
+.player-page {
+    padding: 120px 0 80px;
+}
+
+.player-back-link {
+    display: inline-block;
+    margin-bottom: 20px;
+    color: var(--accent-cyan);
+    text-decoration: none;
+    font-weight: 700;
+}
+
+.player-profile-card {
+    background: rgba(10, 22, 40, 0.94);
+    border: 2px solid rgba(0, 212, 255, 0.35);
+    border-radius: 18px;
+    padding: 26px;
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 28px;
+    align-items: start;
+}
+
+.player-profile-image-wrap {
+    width: 100%;
+    aspect-ratio: 3 / 4;
+    border-radius: 14px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.05);
+    position: relative;
+}
+
+.player-profile-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.player-profile-image-fallback {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 72px;
+    font-weight: 900;
+    color: rgba(255, 255, 255, 0.88);
+    opacity: 0;
+}
+
+.player-profile-image-fallback--show {
+    opacity: 1;
+}
+
+.player-profile-name {
+    font-family: 'Orbitron', sans-serif;
+    font-size: 42px;
+    line-height: 1.1;
+    color: #fff;
+}
+
+.player-profile-role {
+    margin-top: 8px;
+    font-size: 18px;
+    color: var(--accent-cyan);
+    font-weight: 700;
+}
+
+.player-profile-tagline {
+    margin-top: 10px;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.player-profile-meta {
+    margin-top: 16px;
+    display: grid;
+    gap: 6px;
+    color: rgba(255, 255, 255, 0.82);
+}
+
+.player-profile-bio {
+    margin-top: 16px;
+    font-size: 17px;
+    line-height: 1.6;
+    color: rgba(255, 255, 255, 0.86);
 }
 
 .player-filter-bar {
@@ -944,11 +1075,15 @@ footer {
         text-align: center;
     }
 
-    .match-date {
-        min-width: unset;
+    .match-player-avatar {
+        justify-self: center;
     }
 
     .match-result {
         justify-self: center;
+    }
+
+    .player-profile-card {
+        grid-template-columns: 1fr;
     }
 }

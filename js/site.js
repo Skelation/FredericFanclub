@@ -39,7 +39,117 @@
     if (matchList && matchFetchStatus) {
         loadMatchHistory(matchList, matchFetchStatus);
     }
+
+    initPlayerProfilePage();
 })();
+
+const PLAYER_PROFILES = {
+    themistered: {
+        name: 'TheMisterED',
+        tag: '#0007',
+        role: 'In-Game Leader',
+        mainAgent: 'Omen',
+        tagline: 'Calm caller with clutch timing.',
+        bio: 'Leads team structure, keeps comms clean, and stabilizes late-round decisions.',
+        image: 'images/players/profiles/themistered.png'
+    },
+    heri: {
+        name: 'Heri',
+        tag: '#BLUB',
+        role: 'Controller / Flex',
+        mainAgent: 'Brimstone',
+        tagline: 'Utility-heavy, disciplined map control.',
+        bio: 'Sets pace through smoke timing and post-plant setups to secure rounds.',
+        image: 'images/players/profiles/heri.png'
+    },
+    hhj: {
+        name: 'hhj',
+        tag: '#8769',
+        role: 'Duelist',
+        mainAgent: 'Jett',
+        tagline: 'Aggressive space creator.',
+        bio: 'Looks for first picks and creates pressure to open sites for the team.',
+        image: 'images/players/profiles/hhj.png'
+    },
+    djib: {
+        name: 'Djib',
+        tag: '#LOVE',
+        role: 'Sentinel',
+        mainAgent: 'Killjoy',
+        tagline: 'Anchor specialist with strong lurk reads.',
+        bio: 'Locks down flanks and controls rotations with strong utility discipline.',
+        image: 'images/players/profiles/djib.png'
+    },
+    graussbyt: {
+        name: 'Graussbyt',
+        tag: '#5629',
+        role: 'Initiator',
+        mainAgent: 'Sova',
+        tagline: 'Information engine of the team.',
+        bio: 'Creates opening info and enables executes through timing and recon usage.',
+        image: 'images/players/profiles/graussbyt.png'
+    },
+    lal6s9gne: {
+        name: 'Lal6s9gne',
+        tag: '#6641',
+        role: 'Flex',
+        mainAgent: 'Skye',
+        tagline: 'Adaptable mid-round impact.',
+        bio: 'Fills composition needs and supports both entry and retake structures.',
+        image: 'images/players/profiles/lal6s9gne.png'
+    },
+    xtrix: {
+        name: 'Xtrix',
+        tag: '#DREAM',
+        role: 'Duelist / Flex',
+        mainAgent: 'Raze',
+        tagline: 'Explosive entries and momentum plays.',
+        bio: 'Creates high-tempo openings and converts pressure into site control.',
+        image: 'images/players/profiles/xtrix.png'
+    },
+    vincent: {
+        name: 'Vincent',
+        tag: '#4397',
+        role: 'Sentinel / Anchor',
+        mainAgent: 'Cypher',
+        tagline: 'Reliable hold and clean retakes.',
+        bio: 'Brings consistency and structure with smart setups and post-plant presence.',
+        image: 'images/players/profiles/vincent.png'
+    }
+};
+
+function initPlayerProfilePage() {
+    const nameEl = document.getElementById('playerProfileName');
+    if (!nameEl) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const id = (params.get('player') || '').trim().toLowerCase();
+    const profile = PLAYER_PROFILES[id];
+    if (!profile) return;
+
+    const roleEl = document.getElementById('playerProfileRole');
+    const taglineEl = document.getElementById('playerProfileTagline');
+    const tagEl = document.getElementById('playerProfileTag');
+    const agentEl = document.getElementById('playerProfileAgent');
+    const bioEl = document.getElementById('playerProfileBio');
+    const imageEl = document.getElementById('playerProfileImage');
+    const fallbackEl = document.getElementById('playerProfileImageFallback');
+
+    nameEl.textContent = profile.name;
+    roleEl.textContent = profile.role;
+    taglineEl.textContent = profile.tagline;
+    tagEl.textContent = profile.tag;
+    agentEl.textContent = profile.mainAgent;
+    bioEl.textContent = profile.bio;
+
+    imageEl.alt = `${profile.name} portrait`;
+    imageEl.src = profile.image;
+    imageEl.onerror = function () {
+        this.style.display = 'none';
+        fallbackEl.textContent = String(profile.name || '?').slice(0, 1).toUpperCase();
+        fallbackEl.classList.add('player-profile-image-fallback--show');
+    };
+}
 
 function formatMatchDate(meta) {
     const patched = meta && meta.game_start_patched;
@@ -120,6 +230,24 @@ function playerKeyJs(name, tag) {
     return `${String(name).toLowerCase()}#${String(tag).toLowerCase()}`;
 }
 
+function playerImageFilename(name, tag) {
+    const key = `${String(name).trim()}-${String(tag).trim()}`.toLowerCase();
+    return key.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
+function makePlayerAvatar(name, tag) {
+    const filename = playerImageFilename(name, tag);
+    // Add portraits to images/players using "<name>-<tag>.png" slug format.
+    const src = `images/players/${filename}.png`;
+    const fallback = String(name || '?').slice(0, 1).toUpperCase();
+    return `
+        <div class="match-player-avatar" title="${escapeHtml(`${name}#${tag}`)}">
+            <img src="${escapeHtml(src)}" alt="${escapeHtml(name)} portrait" loading="lazy"
+                 onerror="this.style.display='none'; this.parentElement.classList.add('match-player-avatar--fallback'); this.parentElement.textContent='${escapeHtml(fallback)}';">
+        </div>
+    `;
+}
+
 function isCompetitiveMode(mode) {
     if (!mode || typeof mode !== 'string') return false;
     const m = mode.trim().toLowerCase();
@@ -135,18 +263,13 @@ function renderRosterMatchRow(entry, selectedKeys) {
         const prefer = roster.find((r) => selectedKeys.has(playerKeyJs(r.name, r.tag)));
         if (prefer) primary = prefer;
     }
-    const rosterLine = roster
-        .filter((r) => !selectedKeys || selectedKeys.size === 0 || selectedKeys.has(playerKeyJs(r.name, r.tag)))
-        .map((r) => `${r.name}#${r.tag}`)
-        .join(' · ');
     const rrOverride = rrByPlayer[playerKeyJs(primary.name, primary.tag)];
-    return renderMatchRow(match, primary.name, primary.tag, rosterLine, rrOverride);
+    return renderMatchRow(match, primary.name, primary.tag, rrOverride);
 }
 
-function renderMatchRow(match, riotName, riotTag, rosterLine = '', rrOverride = null) {
+function renderMatchRow(match, riotName, riotTag, rrOverride = null) {
     const meta = match.metadata || {};
     const mapName = meta.map || 'Unknown map';
-    const mode = meta.mode || 'Unknown mode';
     const red = (match.teams && match.teams.red && match.teams.red.rounds_won) ?? '—';
     const blue = (match.teams && match.teams.blue && match.teams.blue.rounds_won) ?? '—';
     const outcome = outcomeForPlayer(match, riotName, riotTag);
@@ -179,17 +302,12 @@ function renderMatchRow(match, riotName, riotTag, rosterLine = '', rrOverride = 
 
     const li = document.createElement('li');
     li.className = 'match-card';
-    const metaBits = [];
-    if (rosterLine) metaBits.push(rosterLine);
-    if (mode) metaBits.push(mode);
-    if (meta.region) metaBits.push(meta.region);
-    const metaText = metaBits.map((s) => escapeHtml(s)).join(' · ');
     li.innerHTML = `
-        <div class="match-date">${formatMatchDate(meta)}</div>
+        ${makePlayerAvatar(riotName, riotTag)}
         <div class="match-main">
             <h3>${escapeHtml(mapName)}</h3>
-            <p class="match-meta">${metaText}</p>
-            <p class="match-scoreline">Red ${escapeHtml(String(red))} – ${escapeHtml(String(blue))} Blue</p>
+            <p class="match-player">${escapeHtml(riotName)}</p>
+            <p class="match-scoreline">Attackers ${escapeHtml(String(red))} – ${escapeHtml(String(blue))} Defenders</p>
             <p class="match-rating-change ${rrClass}">${escapeHtml(rrLabel)}</p>
         </div>
         <span class="match-result ${resultClass}">${escapeHtml(resultLabel)}</span>
