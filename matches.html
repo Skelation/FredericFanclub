@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="fred-api-base" content="http://127.0.0.1:8080">
     <title>Matches | Frederic Fanclub</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="css/styles.css">
@@ -13,7 +14,7 @@
     <nav>
         <div class="container">
             <a href="index.html" class="nav-logo">
-                <img src="images/logo.svg" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
                 <span class="nav-logo-text">FRED</span>
             </a>
             <ul class="nav-links">
@@ -30,58 +31,27 @@
     <header class="page-hero fade-in">
         <div>
             <h1>Matches</h1>
-            <p>Scrims, officials, and showmatches — update the list below as your season grows.</p>
+            <p>Competitive games only. Toggle players below to filter whose matches appear (data from your Go server / <code>.env</code>).</p>
         </div>
     </header>
 
     <section class="matches-section" aria-labelledby="match-history-heading">
         <div class="container">
             <h2 id="match-history-heading" class="section-title">Match history</h2>
-            <ol class="match-list">
-                <li class="match-card">
-                    <div class="match-date">Apr 28</div>
-                    <div class="match-main">
-                        <h3>vs. Team Phoenix</h3>
-                        <p class="match-meta">VCL East · BO3</p>
-                        <p class="match-scoreline">Bind 13–7 · Ascent 9–13 · Lotus 13–11</p>
-                    </div>
-                    <span class="match-result match-result--win">Win</span>
-                </li>
-                <li class="match-card">
-                    <div class="match-date">Apr 14</div>
-                    <div class="match-main">
-                        <h3>vs. Night Market</h3>
-                        <p class="match-meta">Community cup · BO1</p>
-                        <p class="match-scoreline">Sunset 13–10</p>
-                    </div>
-                    <span class="match-result match-result--win">Win</span>
-                </li>
-                <li class="match-card">
-                    <div class="match-date">Mar 30</div>
-                    <div class="match-main">
-                        <h3>vs. Ironstride</h3>
-                        <p class="match-meta">Scrim block · BO3</p>
-                        <p class="match-scoreline">Split 11–13 · Haven 8–13</p>
-                    </div>
-                    <span class="match-result match-result--loss">Loss</span>
-                </li>
-                <li class="match-card">
-                    <div class="match-date">May 5</div>
-                    <div class="match-main">
-                        <h3>vs. TBD</h3>
-                        <p class="match-meta">Weekly officials · BO3</p>
-                        <p class="match-scoreline">Maps TBA</p>
-                    </div>
-                    <span class="match-result match-result--upcoming">Upcoming</span>
-                </li>
-            </ol>
+            <p id="matchFetchStatus" class="match-fetch-status" aria-live="polite"></p>
+            <div id="playerFilterBar" class="player-filter-bar" hidden aria-label="Show matches involving these players"></div>
+            <p id="matchFilterHint" class="match-filter-hint" hidden>Competitive queue only — Unrated / Swiftplay / customs are hidden.</p>
+            <div class="match-load-more-wrap" id="matchLoadMoreWrap">
+                <button type="button" id="matchLoadMoreBtn" class="match-load-more-btn" hidden>Load more matches</button>
+            </div>
+            <ol id="matchList" class="match-list"></ol>
         </div>
     </section>
 
     <footer>
         <div class="container">
             <div class="footer-logo">
-                <img src="images/logo.svg" alt="" class="footer-logo-img" width="50" height="50" decoding="async">
+                <img src="images/LogoTransparent.png" alt="" class="footer-logo-img" width="50" height="50" decoding="async">
                 <span class="footer-logo-text">FREDERIC FANCLUB</span>
             </div>
             <div class="footer-content">
