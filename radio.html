@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FRED Radio | Frederic Fanclub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .radio-section {
+            min-height: 70vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        .radio-container {
+            background: rgba(8, 8, 12, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(16px);
+            padding: 3rem;
+            border-radius: 12px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.5);
+        }
+        .radio-status {
+            font-family: 'Orbitron', sans-serif;
+            color: #ff4655; /* Valorant Red */
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+        }
+        .radio-status.live {
+            animation: pulse 2s infinite;
+        }
+        .track-name {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+            min-height: 3rem;
+            color: #fff;
+        }
+        .tune-in-btn {
+            background: #ff4655;
+            color: #fff;
+            border: none;
+            padding: 1rem 3rem;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.2rem;
+            font-weight: 700;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+            text-transform: uppercase;
+        }
+        .tune-in-btn:hover {
+            background: #ff5866;
+            transform: scale(1.05);
+        }
+        .tune-in-btn.active {
+            background: transparent;
+            border: 2px solid #ff4655;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; text-shadow: 0 0 10px rgba(255, 70, 85, 0.5); }
+            50% { opacity: 0.5; text-shadow: 0 0 2px rgba(255, 70, 85, 0.2); }
+            100% { opacity: 1; text-shadow: 0 0 10px rgba(255, 70, 85, 0.5); }
+        }
+        
+        /* Progress Bar */
+        .radio-progress-wrap {
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            margin: 2rem 0;
+            overflow: hidden;
+            position: relative;
+        }
+        .radio-progress-bar {
+            height: 100%;
+            background: #ff4655;
+            width: 0%;
+            transition: width 0.5s linear;
+        }
+
+        /* Volume Control */
+        .volume-control {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-top: 2rem;
+        }
+        #volumeIcon {
+            font-size: 1.2rem;
+            color: rgba(255, 255, 255, 0.7);
+            width: 24px;
+            text-align: center;
+        }
+        #volumeSlider {
+            -webkit-appearance: none;
+            width: 150px;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 2px;
+            outline: none;
+            cursor: pointer;
+        }
+        #volumeSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #ff4655;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        #volumeSlider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="index.html#roster">Roster</a></li>
+                <li><a href="index.html#about">About</a></li>
+                <li><a href="matches.html">Matches</a></li>
+                <li><a href="radio.html" class="nav-active">Radio</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>FRED 24/7 RADIO</h1>
+        </div>
+    </header>
+
+    <section class="radio-section fade-in">
+        <div class="radio-container">
+            <div id="radioStatus" class="radio-status">● OFFLINE</div>
+            <h2 id="currentTrack" class="track-name">Waiting to tune in...</h2>
+            
+            <div class="radio-progress-wrap">
+                <div id="radioProgressBar" class="radio-progress-bar"></div>
+            </div>
+
+                <button id="tuneInBtn" class="tune-in-btn">Tune In</button>
+
+                <div class="volume-control">
+                    <span id="volumeIcon">🔉</span>
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3">
+                </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <img src="images/LogoTransparent.png" alt="" class="footer-logo-img" width="50" height="50" decoding="async">
+                <span class="footer-logo-text">FREDERIC FANCLUB</span>
+            </div>
+            <div class="footer-content">
+                © 2026 FRED Esports. Sharks in the Game.
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- 1. CONFIGURATION ---
+        // Add all your songs here. 
+        // CRITICAL: The 'duration' must be the EXACT length of the audio file in seconds.
+        // Shuffle this array once however you like; it will act as a randomized, infinite loop.
+        const playlist = [
+            { title: "Heals Everywhere", src: "audio/Heals Everywhere.mp3", duration: 175 }, // Example: 3 mins
+            { title: "Lasagne Cam Scan", src: "audio/Lasagne Cam Scan.mp3", duration: 166},
+            { title: "Oh Graussbyt", src: "audio/Oh Graussbyt.mp3", duration: 121}
+        ];
+
+        // --- 2. RADIO LOGIC ---
+        const audio = new Audio();
+        let isPlaying = false;
+        let currentTrackIndex = -1;
+        let syncInterval;
+
+        const tuneInBtn = document.getElementById('tuneInBtn');
+        const currentTrackEl = document.getElementById('currentTrack');
+        const statusEl = document.getElementById('radioStatus');
+        const progressBar = document.getElementById('radioProgressBar');
+
+        // Calculates exactly what song should be playing right now based on global time
+        function getGlobalRadioState() {
+            const now = Math.floor(Date.now() / 1000); // Current Unix time in seconds
+            const totalDuration = playlist.reduce((sum, track) => sum + track.duration, 0);
+            
+            // Where are we in the infinite loop of the playlist?
+            let cycleTime = now % totalDuration;
+
+            let elapsed = 0;
+            for (let i = 0; i < playlist.length; i++) {
+                if (cycleTime < elapsed + playlist[i].duration) {
+                    return {
+                        track: playlist[i],
+                        index: i,
+                        offset: cycleTime - elapsed
+                    };
+                }
+                elapsed += playlist[i].duration;
+            }
+        }
+
+        function syncRadio() {
+            if (!isPlaying) return;
+
+            const state = getGlobalRadioState();
+
+            // Update UI
+            currentTrackEl.textContent = state.track.title;
+            progressBar.style.width = ((state.offset / state.track.duration) * 100) + '%';
+
+            // If the calculated track is different from what's playing, switch it
+            if (currentTrackIndex !== state.index) {
+                audio.src = state.track.src;
+                currentTrackIndex = state.index;
+                audio.currentTime = state.offset;
+                audio.play().catch(e => {
+                    console.error("Autoplay prevented:", e);
+                    stopRadio();
+                });
+            } 
+            // If the same track is playing, check if we drifted out of sync (e.g. user computer lagged)
+            else if (Math.abs(audio.currentTime - state.offset) > 2) {
+                audio.currentTime = state.offset; // Correct drift
+            }
+        }
+
+        function startRadio() {
+            isPlaying = true;
+            statusEl.textContent = '● LIVE BROADCAST';
+            statusEl.classList.add('live');
+            tuneInBtn.textContent = 'Disconnect';
+            tuneInBtn.classList.add('active');
+            
+            // Force first sync immediately, then check every second
+            const state = getGlobalRadioState();
+            audio.src = state.track.src;
+            currentTrackIndex = state.index;
+            audio.currentTime = state.offset;
+            
+            audio.play().then(() => {
+                syncInterval = setInterval(syncRadio, 1000);
+            }).catch(e => {
+                console.error("Playback failed:", e);
+                stopRadio();
+            });
+        }
+
+        function stopRadio() {
+            isPlaying = false;
+            audio.pause();
+            clearInterval(syncInterval);
+            
+            statusEl.textContent = '● OFFLINE';
+            statusEl.classList.remove('live');
+            tuneInBtn.textContent = 'Tune In';
+            tuneInBtn.classList.remove('active');
+            currentTrackEl.textContent = 'Waiting to tune in...';
+            progressBar.style.width = '0%';
+            currentTrackIndex = -1;
+        }
+
+        tuneInBtn.addEventListener('click', () => {
+            if (isPlaying) {
+                stopRadio();
+            } else {
+                startRadio();
+            }
+        });
+
+        // --- VOLUME LOGIC ---
+        const volumeSlider = document.getElementById('volumeSlider');
+        const volumeIcon = document.getElementById('volumeIcon');
+
+        // Set initial volume to whatever the slider defaults to (0.3)
+        audio.volume = volumeSlider.value;
+
+        // Listen for changes on the slider
+        volumeSlider.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value);
+            audio.volume = vol;
+            
+            // Update the icon dynamically based on how loud it is
+            if (vol === 0) {
+                volumeIcon.textContent = '🔇';
+            } else if (vol < 0.5) {
+                volumeIcon.textContent = '🔉';
+            } else {
+                volumeIcon.textContent = '🔊';
+            }
+        });
+    </script>
+    <script src="js/site.js"></script>
+</body>
+</html>

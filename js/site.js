@@ -557,7 +557,7 @@ async function loadMatchHistory(matchList, statusEl) {
     if (!apiBase) {
         statusEl.classList.add('match-fetch-status--error');
         statusEl.textContent =
-            'Add <meta name="fred-api-base" content="http://127.0.0.1:8080"> to matches.html (your Go server URL).';
+            'Add <meta name="fred-api-base" content="http://fredericfan.club:8080"> to matches.html (your Go server URL).';
         return;
     }
 

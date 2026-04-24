@@ -313,23 +313,54 @@ func writeRosterCache(path string, resp rosterAPIResponse) error {
 	return os.Rename(tmp, path)
 }
 
+type playerFetchResult struct {
+	matches     []json.RawMessage
+	rrByMatchID map[string]int64
+	resume      playerResume
+	warnings    []string
+}
+
 func buildRosterResponse(ctx context.Context, base, matchPath, apiKey, region, platform string, players []riotPlayer, initialPages int) rosterAPIResponse {
+	results := make([]playerFetchResult, len(players))
+	var wg sync.WaitGroup
+
+	for i, p := range players {
+		wg.Add(1)
+		go func(i int, p riotPlayer) {
+			defer wg.Done()
+			var warns []string
+
+			rrByMatchID, rrWarn := fetchPlayerMMRHistory(ctx, base, region, apiKey, p)
+			if rrWarn != "" {
+				warns = append(warns, rrWarn)
+			}
+
+			matches, next, exhausted, matchWarn := fetchPlayerCompetitivePages(ctx, base, matchPath, region, platform, apiKey, p, 0, initialPages)
+			if matchWarn != "" {
+				warns = append(warns, matchWarn)
+			}
+
+			results[i] = playerFetchResult{
+				matches:     matches,
+				rrByMatchID: rrByMatchID,
+				resume:      playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted},
+				warnings:    warns,
+			}
+		}(i, p)
+	}
+
+	wg.Wait()
+
 	agg := make(map[string]*aggEntry)
 	warnings := make([]string, 0)
 	noID := 0
 	resume := make([]playerResume, 0, len(players))
 
-	for _, p := range players {
-		rrByMatchID, rrWarn := fetchPlayerMMRHistory(ctx, base, region, apiKey, p)
-		if rrWarn != "" {
-			warnings = append(warnings, rrWarn)
-		}
-		matches, next, exhausted, w := fetchPlayerCompetitivePages(ctx, base, matchPath, region, platform, apiKey, p, 0, initialPages)
-		if w != "" {
-			warnings = append(warnings, w)
-		}
-		mergeMatchesIntoAgg(agg, p, matches, rrByMatchID, &noID)
-		resume = append(resume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
+	for i, p := range players {
+		r := results[i]
+		warnings = append(warnings, r.warnings...)
+		mergeMatchesIntoAgg(agg, p, r.matches, r.rrByMatchID, &noID)
+		resume = append(resume, r.resume)
 	}
 
 	out := aggToSortedRoster(agg)
@@ -461,6 +492,8 @@ func computeHasMore(resume []playerResume) bool {
 	return false
 }
 
+var rosterRefreshing bool
+
 func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []string, base, matchPath, apiKey string) {
 	applyCORS(w, r, allowed)
 	region := strings.TrimSpace(os.Getenv("VALORANT_REGION"))
@@ -477,23 +510,41 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 	ttl := cacheTTL()
 
 	rosterCacheMu.Lock()
-	defer rosterCacheMu.Unlock()
+	cached, err := readRosterCache(cachePath)
+	hasCache := err == nil
+	isStale := !hasCache || time.Since(time.Unix(cached.SavedAtUnix, 0)) > ttl
 
-	if cached, err := readRosterCache(cachePath); err == nil {
-		age := time.Since(time.Unix(cached.SavedAtUnix, 0))
-		if age >= 0 && age <= ttl {
-			w.Header().Set("Content-Type", "application/json")
-			enc := json.NewEncoder(w)
-			enc.SetEscapeHTML(true)
-			_ = enc.Encode(cached.Response)
-			return
+	// If we have any cached data (even stale), return it immediately
+	// and refresh in the background so the next request is also instant.
+	if hasCache {
+		if isStale && !rosterRefreshing {
+			rosterRefreshing = true
+			go func() {
+				resp := buildRosterResponse(context.Background(), base, matchPath, apiKey, region, platform, players, initialPages)
+				rosterCacheMu.Lock()
+				if err := writeRosterCache(cachePath, resp); err != nil {
+					log.Printf("roster cache write failed: %v", err)
+				}
+				rosterRefreshing = false
+				rosterCacheMu.Unlock()
+			}()
 		}
+		rosterCacheMu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(true)
+		_ = enc.Encode(cached.Response)
+		return
 	}
 
+	// No cache at all — first ever load, must wait.
+	rosterCacheMu.Unlock()
 	resp := buildRosterResponse(r.Context(), base, matchPath, apiKey, region, platform, players, initialPages)
+	rosterCacheMu.Lock()
 	if err := writeRosterCache(cachePath, resp); err != nil {
 		log.Printf("roster cache write failed: %v", err)
 	}
+	rosterCacheMu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(true)
