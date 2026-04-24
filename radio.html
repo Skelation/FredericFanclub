@@ -121,6 +121,109 @@
         #volumeSlider::-webkit-slider-thumb:hover {
             transform: scale(1.2);
         }
+
+        /* Queue List */
+        .queue-container {
+            margin-top: 3rem;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: 8px;
+            padding: 1.5rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .queue-container h3 {
+            font-family: 'Orbitron', sans-serif;
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding-bottom: 0.5rem;
+        }
+        .queue-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            max-height: 220px;
+            overflow-y: auto;
+            scroll-behavior: smooth;
+        }
+        .queue-item {
+            padding: 0.8rem 1rem;
+            margin-bottom: 0.4rem;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1.1rem;
+            color: rgba(255, 255, 255, 0.6);
+            transition: all 0.2s ease;
+        }
+        .queue-item.playing {
+            background: rgba(255, 70, 85, 0.15);
+            color: #fff;
+            border-left: 3px solid #ff4655;
+            font-weight: 700;
+        }
+        .queue-item-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .queue-item.playing .queue-item-title::before {
+            content: '▶';
+            font-size: 0.8rem;
+            color: #ff4655;
+        }
+        .queue-item-duration {
+            font-size: 0.9rem;
+            font-family: 'Orbitron', sans-serif;
+            opacity: 0.7;
+        }
+        
+        /* Custom scrollbar for the queue */
+        .queue-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .queue-list::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.2);
+        }
+        .queue-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+        .queue-list::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 70, 85, 0.5);
+        }
+
+        /* "Now Playing" Badge and Queue Dimming */
+        .queue-item.playing .queue-item-title::after {
+            content: 'NOW PLAYING';
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.65rem;
+            background: #ff4655;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 3px;
+            margin-left: 12px;
+            letter-spacing: 0.1em;
+            font-weight: 900;
+            vertical-align: middle;
+            text-shadow: none;
+        }
+
+        /* Dim the upcoming/past songs so the playing one stands out */
+        .queue-item:not(.playing) {
+            opacity: 0.5;
+        }
+        
+        /* Brighten them back up a bit if the user hovers over them */
+        .queue-item:not(.playing):hover {
+            opacity: 0.8;
+        }
     </style>
 </head>
 <body>
@@ -163,6 +266,12 @@
                     <span id="volumeIcon">🔉</span>
                     <input type="range" id="volumeSlider" min="0" max="1" step="0.01" value="0.3">
                 </div>
+
+                <div class="queue-container">
+                    <h3>Radio Queue</h3>
+                    <ul id="queueList" class="queue-list">
+                        </ul>
+                </div>
         </div>
     </section>
 
@@ -186,7 +295,10 @@
         const playlist = [
             { title: "Heals Everywhere", src: "audio/Heals Everywhere.mp3", duration: 175 }, // Example: 3 mins
             { title: "Lasagne Cam Scan", src: "audio/Lasagne Cam Scan.mp3", duration: 166},
-            { title: "Oh Graussbyt", src: "audio/Oh Graussbyt.mp3", duration: 121}
+            { title: "Oh Graussbyt", src: "audio/Oh Graussbyt.mp3", duration: 121},
+            { title: "Quentin Crosshair Clean", src: "audio/Quentin Crosshair Clean.mp3", duration: 210},
+            { title: "THEMISTERED", src: "audio/THEMISTERED.mp3", duration: 242},
+            { title: "Vincivincent", src: "audio/Vincivincent.mp3", duration: 200}
         ];
 
         // --- 2. RADIO LOGIC ---
@@ -239,6 +351,7 @@
                     console.error("Autoplay prevented:", e);
                     stopRadio();
                 });
+                highlightCurrentTrack(state.index);
             } 
             // If the same track is playing, check if we drifted out of sync (e.g. user computer lagged)
             else if (Math.abs(audio.currentTime - state.offset) > 2) {
@@ -258,6 +371,8 @@
             audio.src = state.track.src;
             currentTrackIndex = state.index;
             audio.currentTime = state.offset;
+
+            highlightCurrentTrack(state.index);
             
             audio.play().then(() => {
                 syncInterval = setInterval(syncRadio, 1000);
@@ -279,6 +394,8 @@
             currentTrackEl.textContent = 'Waiting to tune in...';
             progressBar.style.width = '0%';
             currentTrackIndex = -1;
+
+            document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('playing'));
         }
 
         tuneInBtn.addEventListener('click', () => {
@@ -310,7 +427,59 @@
                 volumeIcon.textContent = '🔊';
             }
         });
+
+        // --- QUEUE LOGIC ---
+        const queueListEl = document.getElementById('queueList');
+
+        // Helper to turn seconds into M:SS
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60);
+            const s = Math.floor(seconds % 60);
+            return m + ':' + (s < 10 ? '0' : '') + s;
+        }
+
+        // Render the list of songs
+        function renderQueue() {
+            queueListEl.innerHTML = '';
+            playlist.forEach((track, index) => {
+                const li = document.createElement('li');
+                li.className = 'queue-item';
+                li.id = 'queue-item-' + index;
+
+                const titleSpan = document.createElement('span');
+                titleSpan.className = 'queue-item-title';
+                titleSpan.textContent = track.title;
+
+                const timeSpan = document.createElement('span');
+                timeSpan.className = 'queue-item-duration';
+                timeSpan.textContent = formatTime(track.duration);
+
+                li.appendChild(titleSpan);
+                li.appendChild(timeSpan);
+                queueListEl.appendChild(li);
+            });
+        }
+
+        // Call immediately to draw the list
+        renderQueue();
+
+        const liveState = getGlobalRadioState();
+        highlightCurrentTrack(liveState.index);
+
+        // Helper to highlight the active track in the queue
+        function highlightCurrentTrack(index) {
+            document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('playing'));
+            const activeItem = document.getElementById('queue-item-' + index);
+            if (activeItem) {
+                activeItem.classList.add('playing');
+                // Optional: wait a tiny bit for the queue to render before scrolling
+                setTimeout(() => {
+                    activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }, 100);
+            }
+        }
     </script>
+
     <script src="js/site.js"></script>
 </body>
 </html>
