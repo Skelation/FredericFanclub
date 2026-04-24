@@ -43,6 +43,17 @@
     initPlayerProfilePage();
 })();
 
+// Helper function to safely render text in HTML
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 const PLAYER_PROFILES = {
     themistered: {
         name: 'TheMisterED',
@@ -264,16 +275,23 @@ function renderRosterMatchRow(entry, selectedKeys) {
         if (prefer) primary = prefer;
     }
     const rrOverride = rrByPlayer[playerKeyJs(primary.name, primary.tag)];
-    return renderMatchRow(match, primary.name, primary.tag, rrOverride);
+    
+    // Pass the 'roster' array as the 5th argument
+    return renderMatchRow(match, primary.name, primary.tag, rrOverride, roster);
 }
 
-function renderMatchRow(match, riotName, riotTag, rrOverride = null) {
+function renderMatchRow(match, riotName, riotTag, rrOverride = null, roster = []) {
     const meta = match.metadata || {};
     const mapName = meta.map || 'Unknown map';
     const red = (match.teams && match.teams.red && match.teams.red.rounds_won) ?? '—';
     const blue = (match.teams && match.teams.blue && match.teams.blue.rounds_won) ?? '—';
     const outcome = outcomeForPlayer(match, riotName, riotTag);
-    const rrDelta = Number.isFinite(Number(rrOverride)) ? Number(rrOverride) : ratingDeltaForPlayer(match, riotName, riotTag);
+    
+    // Safe check for RR
+    const rrDelta = (rrOverride !== null && rrOverride !== undefined && Number.isFinite(Number(rrOverride))) 
+        ? Number(rrOverride) 
+        : ratingDeltaForPlayer(match, riotName, riotTag);
+    
     let rrClass = 'match-rating-change--unknown';
     let rrLabel = 'RR —';
     if (rrDelta !== null) {
@@ -288,6 +306,7 @@ function renderMatchRow(match, riotName, riotTag, rrOverride = null) {
             rrLabel = 'RR +0';
         }
     }
+    
     let resultClass = 'match-result--upcoming';
     let resultLabel = 'Draw';
     if (outcome === 'win') {
@@ -300,11 +319,19 @@ function renderMatchRow(match, riotName, riotTag, rrOverride = null) {
         resultLabel = '—';
     }
 
+    // Generate the roster label
+    let rosterLabelHTML = '';
+    if (roster && roster.length > 0) {
+        const rosterNames = roster.map(p => escapeHtml(p.name)).join(' + ');
+        rosterLabelHTML = `<div class="match-roster-label">👥 ${rosterNames}</div>`;
+    }
+
     const li = document.createElement('li');
     li.className = 'match-card';
     li.innerHTML = `
         ${makePlayerAvatar(riotName, riotTag)}
         <div class="match-main">
+            ${rosterLabelHTML}
             <h3>${escapeHtml(mapName)}</h3>
             <p class="match-player">${escapeHtml(riotName)}</p>
             <p class="match-scoreline">Attackers ${escapeHtml(String(red))} – ${escapeHtml(String(blue))} Defenders</p>
@@ -313,14 +340,6 @@ function renderMatchRow(match, riotName, riotTag, rrOverride = null) {
         <span class="match-result ${resultClass}">${escapeHtml(resultLabel)}</span>
     `;
     return li;
-}
-
-function escapeHtml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
 }
 
 function collectPlayersFromEntries(entries) {
