@@ -1,3 +1,5 @@
 node_modules/
 fred-api-server.exe
 .env
+server/data
+server/fred.db

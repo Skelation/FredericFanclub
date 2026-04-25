@@ -41,6 +41,46 @@
     }
 
     initPlayerProfilePage();
+
+    // --- AUTHENTICATION & WALLET ---
+    window.loadUserProfile = async function() {
+        const authContainer = document.getElementById('authContainer');
+        if (!authContainer) return;
+
+        // Make sure we have the API URL
+        const meta = document.querySelector('meta[name="fred-api-base"]');
+        const apiBase = ((meta && meta.getAttribute('content')) || 'https://api.fredericfan.club').replace(/\/$/, '');
+
+        try {
+            // Fetch the profile. "credentials: 'include'" is CRITICAL so it sends the cookie!
+            const res = await fetch(`${apiBase}/api/user/me`, {
+                method: 'GET',
+                credentials: 'include' 
+            });
+
+            if (res.ok) {
+                const user = await res.json();
+                
+                // Replace the Login button with their profile & wallet
+                authContainer.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.5); padding: 4px 12px 4px 4px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1);">
+                        <img src="${user.avatar_url}" alt="Profile" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #ff4655;">
+                        <span style="font-family: 'Orbitron', sans-serif; color: #00ff64; font-weight: 700; font-size: 0.9rem;">
+                            ${Math.round(user.fredtokens * 10) / 10} FT
+                        </span>
+                    </div>
+                `;
+                if (typeof loadBettingMarket === 'function') {
+                    loadBettingMarket();
+                }
+            }
+        } catch (error) {
+            console.error("Not logged in or API unreachable");
+        }
+    }
+
+    // Call it when the page loads
+    window.loadUserProfile();
 })();
 
 // Helper function to safely render text in HTML
@@ -176,39 +216,30 @@ function formatMatchDate(meta) {
 }
 
 function outcomeForPlayer(match, riotName, riotTag) {
-    const players = match && match.players && match.players.all_players;
-    if (!Array.isArray(players)) return null;
     const me = findPlayerInMatch(match, riotName, riotTag);
     if (!me || !me.team) return null;
-    const key = String(me.team).toLowerCase();
-    const myTeam = match.teams && match.teams[key];
-    if (myTeam && typeof myTeam.has_won === 'boolean') {
-        return myTeam.has_won ? 'win' : 'loss';
+
+    let myTeam = null;
+    // Smart switch: v4 array vs v3 object
+    if (Array.isArray(match.teams)) {
+        myTeam = match.teams.find(t => String(t.team_id).toLowerCase() === String(me.team).toLowerCase());
+    } else if (match.teams) {
+        myTeam = match.teams[String(me.team).toLowerCase()];
     }
-    const red = (match.teams && match.teams.red && match.teams.red.rounds_won) || 0;
-    const blue = (match.teams && match.teams.blue && match.teams.blue.rounds_won) || 0;
-    if (me.team === 'Red') {
-        if (red > blue) return 'win';
-        if (red < blue) return 'loss';
-    }
-    if (me.team === 'Blue') {
-        if (blue > red) return 'win';
-        if (blue < red) return 'loss';
-    }
+
+    if (myTeam && typeof myTeam.won === 'boolean') return myTeam.won ? 'win' : 'loss';
+    if (myTeam && typeof myTeam.has_won === 'boolean') return myTeam.has_won ? 'win' : 'loss';
+
     return null;
 }
 
 function findPlayerInMatch(match, riotName, riotTag) {
-    const players = match && match.players && match.players.all_players;
+    let players = match && match.players;
+    // Smart switch: If it's the old v3 object, extract the array
+    if (players && !Array.isArray(players) && players.all_players) players = players.all_players;
     if (!Array.isArray(players)) return null;
-    return (
-        players.find(
-            (p) =>
-                p &&
-                String(p.name).toLowerCase() === String(riotName).toLowerCase() &&
-                String(p.tag).toLowerCase() === String(riotTag).toLowerCase()
-        ) || null
-    );
+    
+    return players.find(p => p && String(p.name).toLowerCase() === String(riotName).toLowerCase() && String(p.tag).toLowerCase() === String(riotTag).toLowerCase()) || null;
 }
 
 function firstNumericFromKeys(obj, keys) {
@@ -265,19 +296,75 @@ function isCompetitiveMode(mode) {
     return m === 'competitive' || m === 'premier';
 }
 
-function renderRosterMatchRow(entry, selectedKeys) {
-    const match = entry.match;
-    const roster = entry.roster || [];
-    const rrByPlayer = (entry && entry.rrByPlayer) || {};
-    let primary = roster[0] || { name: '', tag: '' };
-    if (selectedKeys && selectedKeys.size > 0) {
-        const prefer = roster.find((r) => selectedKeys.has(playerKeyJs(r.name, r.tag)));
-        if (prefer) primary = prefer;
-    }
-    const rrOverride = rrByPlayer[playerKeyJs(primary.name, primary.tag)];
+function renderMatchRow(match, riotName, riotTag, rrOverride = null, roster = []) {
+    const meta = match.metadata || {};
+    // Extract map name correctly for both v3 and v4
+    const mapName = typeof meta.map === 'object' ? meta.map.name : (meta.map || 'Unknown map');
     
-    // Pass the 'roster' array as the 5th argument
-    return renderMatchRow(match, primary.name, primary.tag, rrOverride, roster);
+    let red = '—', blue = '—';
+    if (Array.isArray(match.teams)) {
+        const rt = match.teams.find(t => t.team_id === 'Red');
+        const bt = match.teams.find(t => t.team_id === 'Blue');
+        red = rt ? rt.rounds_won : '—';
+        blue = bt ? bt.rounds_won : '—';
+    } else if (match.teams) {
+        red = match.teams.red?.rounds_won ?? '—';
+        blue = match.teams.blue?.rounds_won ?? '—';
+    }
+
+    const outcome = outcomeForPlayer(match, riotName, riotTag);
+    
+    const rrDelta = (rrOverride !== null && rrOverride !== undefined && Number.isFinite(Number(rrOverride))) 
+        ? Number(rrOverride) 
+        : ratingDeltaForPlayer(match, riotName, riotTag);
+    
+    let rrClass = 'match-rating-change--unknown';
+    let rrLabel = 'RR —';
+    if (rrDelta !== null) {
+        if (rrDelta > 0) {
+            rrClass = 'match-rating-change--gain';
+            rrLabel = `RR +${rrDelta}`;
+        } else if (rrDelta < 0) {
+            rrClass = 'match-rating-change--loss';
+            rrLabel = `RR ${rrDelta}`;
+        } else {
+            rrClass = 'match-rating-change--even';
+            rrLabel = 'RR +0';
+        }
+    }
+    
+    let resultClass = 'match-result--upcoming';
+    let resultLabel = 'Draw';
+    if (outcome === 'win') {
+        resultClass = 'match-result--win';
+        resultLabel = 'Win';
+    } else if (outcome === 'loss') {
+        resultClass = 'match-result--loss';
+        resultLabel = 'Loss';
+    } else if (outcome === null && (red !== '—' || blue !== '—')) {
+        resultLabel = '—';
+    }
+
+    let rosterLabelHTML = '';
+    if (roster && roster.length > 0) {
+        const rosterNames = roster.map(p => escapeHtml(p.name)).join(' + ');
+        rosterLabelHTML = `<div class="match-roster-label">👥 ${rosterNames}</div>`;
+    }
+
+    const li = document.createElement('li');
+    li.className = 'match-card';
+    li.innerHTML = `
+        ${makePlayerAvatar(riotName, riotTag)}
+        <div class="match-main">
+            ${rosterLabelHTML}
+            <h3>${escapeHtml(mapName)}</h3>
+            <p class="match-player">${escapeHtml(riotName)}</p>
+            <p class="match-scoreline">Attackers ${escapeHtml(String(red))} – ${escapeHtml(String(blue))} Defenders</p>
+            <p class="match-rating-change ${rrClass}">${escapeHtml(rrLabel)}</p>
+        </div>
+        <span class="match-result ${resultClass}">${escapeHtml(resultLabel)}</span>
+    `;
+    return li;
 }
 
 function renderMatchRow(match, riotName, riotTag, rrOverride = null, roster = []) {
@@ -442,7 +529,7 @@ function initMatchFilters(body, matchList, statusEl, apiBase) {
         } else if (state.selected.size === 0) {
             msg = `There are ${comp.length} competitive game(s); turn at least one player on to see matches.`;
         } else {
-            msg = `Showing ${filtered.length} competitive game(s) (${comp.length} competitive loaded, ${state.allEntries.length} total from API).`;
+            msg = ``;
             if (state.warnings.length) msg += ' Notes: ' + state.warnings.join(' ');
             if (resumeHasMore(state)) msg += ' Use “Load more” for older competitive games.';
         }
@@ -580,12 +667,14 @@ async function loadMatchHistory(matchList, statusEl) {
         return;
     }
 
-    const url = `${apiBase}/api/matches/roster`;
+    // NEW: Append the current exact millisecond to force a fresh pull
+    const url = `${apiBase}/api/matches/roster?_t=${Date.now()}`;
     statusEl.textContent = 'Loading roster matches…';
 
     let res;
     try {
-        res = await fetch(url);
+        // NEW: Tell the browser explicitly to bypass its local memory
+        res = await fetch(url, { cache: 'no-store' });
     } catch (e) {
         statusEl.classList.add('match-fetch-status--error');
         statusEl.textContent =
@@ -623,3 +712,308 @@ async function loadMatchHistory(matchList, statusEl) {
 
     initMatchFilters(body, matchList, statusEl, apiBase);
 }
+
+// --- PREDICTION MARKET LOGIC ---
+
+async function loadBettingMarket() {
+    const widget = document.getElementById('bettingWidget');
+    if (!widget) return; 
+
+    const authCheck = document.getElementById('authContainer');
+    if (!authCheck || authCheck.innerHTML.includes('Login with Discord')) {
+        widget.style.display = 'none';
+        return;
+    }
+    
+    widget.style.display = 'block';
+
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    
+    try {
+        // NEW: Fetching the single event market!
+        const res = await fetch(`${apiBase}/api/betting/market`, { credentials: 'include', cache: 'no-store' });
+        if (res.ok) {
+            const data = await res.json();
+            
+            const statusBadge = document.getElementById('marketStatusBadge');
+            const publicArea = document.getElementById('publicMarketArea');
+            const closedArea = document.getElementById('marketClosedArea');
+            const btnOver = document.getElementById('btnOver');
+            const btnUnder = document.getElementById('btnUnder');
+            const msgEl = document.getElementById('betMessage');
+            
+            // 1. If NO market exists
+            if (data.exists === false) {
+                publicArea.style.display = "none";
+                closedArea.style.display = "block";
+                statusBadge.textContent = "MARKET CLOSED";
+                statusBadge.className = "market-badge status-closed";
+                statusBadge.style.cssText = ""; // Reset custom styles
+                return;
+            }
+
+            // 2. A market exists (Open or Locked)
+            publicArea.style.display = "block";
+            closedArea.style.display = "none";
+
+            document.getElementById('propPlayerName').textContent = data.player;
+            document.getElementById('propTypeName').textContent = "Total " + data.prop_type;
+            document.getElementById('propLineValue').textContent = Number(data.line.toFixed(2));
+            document.getElementById('oddsOver').textContent = data.over_multiplier.toFixed(2) + "x";
+            document.getElementById('oddsUnder').textContent = data.under_multiplier.toFixed(2) + "x";
+
+            // --- RENDER LIVE BETS FEED ---
+            const betsList = document.getElementById('liveBetsList');
+            if (betsList) {
+                const activeBets = data.active_bets || []; // <--- FIX: Fallback to empty array!
+                
+                if (activeBets.length === 0) {
+                    betsList.innerHTML = `<p style="text-align: center; color: rgba(255,255,255,0.4); font-size: 0.9rem;">No bets placed yet. Be the first!</p>`;
+                } else {
+                    betsList.innerHTML = activeBets.map(bet => {
+                        const isOver = bet.choice === 'over';
+                        const choiceColor = isOver ? '#00ff64' : '#ff4655';
+                        const amountFormatted = Math.round(bet.amount * 10) / 10;
+
+                        let displayChoice = bet.choice;
+                        if (data.prop_type === 'match_result') {
+                            displayChoice = isOver ? 'WIN' : 'LOSS';
+                        }
+                        
+                        return `
+                        <div style="display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); transition: transform 0.2s;">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <img src="${escapeHtml(bet.avatar)}" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid ${choiceColor};">
+                                <span style="font-weight: 700; color: white; font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">${escapeHtml(bet.username)}</span>
+                            </div>
+                            <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">
+                                <span style="color: rgba(255,255,255,0.5); margin-right: 8px;">Bet</span>
+                                <span style="color: ${choiceColor}; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-right: 12px;">${escapeHtml(bet.choice)}</span>
+                                <span style="color: #00d4ff; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1rem;">${amountFormatted} FT</span>
+                            </div>
+                        </div>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // If it is OPEN
+             // If it is OPEN
+            if (data.is_open) {
+                statusBadge.textContent = "MARKET OPEN";
+                statusBadge.className = "market-badge status-open";
+                statusBadge.style.cssText = ""; 
+                
+                // NEW: Smart Labels!
+                if (data.prop_type === 'match_result') {
+                    document.getElementById('propTypeName').textContent = "MATCH RESULT";
+                    document.getElementById('propLineValue').parentElement.style.display = 'none'; // Hide the line
+                    btnOver.innerHTML = `FRED WIN (<span id="oddsOver">${data.over_multiplier.toFixed(2)}x</span>)`;
+                    btnUnder.innerHTML = `FRED LOSS (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
+                } else if (data.prop_type === 'kd_ratio') {
+                    document.getElementById('propTypeName').textContent = "K/D RATIO"; // Prettify KD!
+                    document.getElementById('propLineValue').parentElement.style.display = 'block'; 
+                    btnOver.innerHTML = `OVER (<span id="oddsOver">${data.over_multiplier.toFixed(2)}x</span>)`;
+                    btnUnder.innerHTML = `UNDER (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
+                } else {
+                    document.getElementById('propTypeName').textContent = "Total " + data.prop_type;
+                    document.getElementById('propLineValue').parentElement.style.display = 'block'; 
+                    btnOver.innerHTML = `OVER (<span id="oddsOver">${data.over_multiplier.toFixed(2)}x</span>)`;
+                    btnUnder.innerHTML = `UNDER (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
+                }
+                
+                btnOver.disabled = false;
+                btnUnder.disabled = false;
+                btnOver.style.opacity = "1";
+                btnUnder.style.opacity = "1";
+                msgEl.textContent = "";
+            }
+            // If it is LOCKED
+            else {
+                statusBadge.textContent = "MARKET LOCKED";
+                statusBadge.className = "market-badge status-closed";
+                // Add a cool orange "Locked" style
+                statusBadge.style.color = "#ffaa00"; 
+                statusBadge.style.borderColor = "rgba(255, 170, 0, 0.3)";
+                statusBadge.style.background = "rgba(255, 170, 0, 0.1)";
+
+                btnOver.disabled = true;
+                btnUnder.disabled = true;
+                btnOver.style.opacity = "0.5";
+                btnUnder.style.opacity = "0.5";
+                msgEl.textContent = "Bets are locked! Good luck!";
+                msgEl.style.color = "#ffaa00";
+            }
+        }
+    } catch (err) {
+        console.error("Failed to load betting market", err);
+    }
+}
+
+window.placePropBet = async function(choice) {
+    const msgEl = document.getElementById('betMessage');
+    const amountInput = document.getElementById('betAmountInput');
+    const amount = parseInt(amountInput.value);
+
+    if (isNaN(amount) || amount <= 0) {
+        msgEl.style.color = "#ff4655";
+        msgEl.textContent = "Please enter a valid amount.";
+        return;
+    }
+
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    msgEl.style.color = "white";
+    msgEl.textContent = "Placing bet...";
+
+    try {
+        const res = await fetch(`${apiBase}/api/betting/place`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ choice: choice, amount: amount }) // "over" or "under"
+        });
+
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+            msgEl.style.color = "#00ff64";
+            msgEl.textContent = `Success! Bet locked in. New Balance: ${data.new_balance} FT`;
+            amountInput.value = '';
+            window.loadUserProfile(); 
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = data.error || "Failed to place bet.";
+        }
+    } catch (err) {
+        msgEl.style.color = "#ff4655";
+        msgEl.textContent = "Network error. Try again.";
+    }
+};
+
+// --- ADMIN CONTROLS ---
+
+document.addEventListener('keydown', function(e) {
+    if (e.shiftKey && e.key === 'A') {
+        const panel = document.getElementById('adminPanel');
+        if (panel) panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+    }
+});
+
+let pendingPreview = null;
+
+window.previewPropBet = async function() {
+    const token = document.getElementById('adminTokenInput').value;
+    const player = document.getElementById('adminPlayerSelect').value;
+    const propType = document.getElementById('adminPropSelect').value; // Grab the prop type!
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    msgEl.style.color = "white";
+    msgEl.textContent = "Crunching historical stats...";
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/preview-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player: player, prop_type: propType }) // Send it!
+        });
+        
+        if (res.ok) {
+            pendingPreview = await res.json();
+            
+            let displayType = pendingPreview.prop_type.toUpperCase().replace('_', '/');
+            if (pendingPreview.prop_type === 'match_result') displayType = "MATCH RESULT";
+
+            document.getElementById('previewPlayer').textContent = pendingPreview.player.toUpperCase();
+            document.getElementById('previewType').textContent = displayType; // Formatted nicely!
+            document.getElementById('previewLine').textContent = Number(pendingPreview.line.toFixed(2));
+            document.getElementById('previewOver').textContent = pendingPreview.over_multiplier.toFixed(2) + 'x';
+            document.getElementById('previewUnder').textContent = pendingPreview.under_multiplier.toFixed(2) + 'x';
+            
+            document.getElementById('adminPreviewBox').style.display = 'block';
+            msgEl.textContent = "";
+        } else {
+            const err = await res.json();
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = err.error || "Failed to generate preview.";
+        }
+    } catch (e) {
+        msgEl.style.color = "#ff4655";
+        msgEl.textContent = "Network error.";
+    }
+};
+
+window.publishPropBet = async function() {
+    if (!pendingPreview) return;
+    const token = document.getElementById('adminTokenInput').value;
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/publish-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(pendingPreview)
+        });
+        
+        if (res.ok) {
+            document.getElementById('adminMessage').style.color = "#00ff64";
+            document.getElementById('adminMessage').textContent = "MARKET PUBLISHED! The fans can now bet.";
+            loadBettingMarket(); // Instantly show the new market on the screen!
+        }
+    } catch (e) {
+        document.getElementById('adminMessage').style.color = "#ff4655";
+        document.getElementById('adminMessage').textContent = "Failed to publish.";
+    }
+};
+
+window.lockPropMarket = async function() {
+    const token = document.getElementById('adminTokenInput').value;
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/lock-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token }
+        });
+        const data = await res.json();
+        if (res.ok) {
+            msgEl.style.color = "#ffaa00";
+            msgEl.textContent = data.message;
+            loadBettingMarket(); // Refreshes the public UI to show "MARKET CLOSED" badge
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = data.error || "Failed to lock.";
+        }
+    } catch (e) {
+        msgEl.textContent = "Network error.";
+    }
+};
+
+window.resolvePropMarket = async function(outcome) {
+    if (!confirm(`Resolve market as ${outcome.toUpperCase()}? This pays out the tokens and permanently closes the prop.`)) return;
+
+    const token = document.getElementById('adminTokenInput').value;
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/resolve-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ outcome: outcome })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            msgEl.style.color = "#00ff64";
+            msgEl.textContent = data.message;
+            loadBettingMarket(); // Reverts UI to the grey "NO ACTIVE PROPOSITION"
+            loadUserProfile();   // Updates your own wallet instantly if you won!
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = data.error || "Failed to resolve.";
+        }
+    } catch (e) {
+        msgEl.textContent = "Network error.";
+    }
+};

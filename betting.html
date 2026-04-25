@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="fred-api-base" content="https://api.fredericfan.club">
+    <title>FRED Prediction Market</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .betting-page-section {
+            min-height: 70vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4rem 2rem;
+        }
+        /* Make the betting card a bit wider since it's the main focus of the page */
+        .betting-card-large {
+            max-width: 600px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="index.html#roster">Roster</a></li>
+                <li><a href="matches.html">Matches</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html" class="nav-active">Betting</a></li>
+            </ul>
+
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a href="https://api.fredericfan.club/api/auth/discord" class="login-btn">Login with Discord</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>PREDICTION MARKET</h1>
+        </div>
+    </header>
+
+    <section class="betting-page-section">
+            <div class="betting-card betting-card-large fade-in" id="bettingWidget" style="display: none;">
+                <div class="betting-header">
+                    <h2 style="margin: 0;">NEXT MATCH</h2>
+                    <span id="marketStatusBadge" class="market-badge status-open">MARKET OPEN</span>
+                </div>
+
+                <div id="publicMarketArea" style="display: none;">
+                    <div style="text-align: center; margin-bottom: 2rem; background: rgba(0,0,0,0.4); padding: 2rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.05);">
+                        <h3 id="propPlayerName" style="color: #00d4ff; font-size: 2.5rem; margin: 0; font-family: 'Orbitron', sans-serif; letter-spacing: 2px;">PLAYER</h3>
+                        <p id="propTypeName" style="color: rgba(255,255,255,0.7); font-size: 1.2rem; text-transform: uppercase; letter-spacing: 4px; margin-top: 5px;">TOTAL KILLS</p>
+                        <div style="font-size: 3.5rem; font-family: 'Rajdhani', sans-serif; font-weight: bold; margin: 15px 0; color: white;">
+                            LINE: <span id="propLineValue">0.5</span>
+                        </div>
+                    </div>
+
+                    <div class="betting-controls">
+                        <input type="number" id="betAmountInput" class="bet-input" placeholder="Enter bet amount (FT)" min="1">
+                        <div class="bet-buttons">
+                            <button class="bet-btn btn-win" id="btnOver" onclick="placePropBet('over')">OVER (<span id="oddsOver">1.00x</span>)</button>
+                            <button class="bet-btn btn-loss" id="btnUnder" onclick="placePropBet('under')">UNDER (<span id="oddsUnder">1.00x</span>)</button>
+                        </div>
+                        <p id="betMessage" style="text-align: center; margin-top: 1rem; font-family: 'Rajdhani', sans-serif; font-weight: bold;"></p>
+                    </div>
+                    <div id="liveBetsFeed" style="margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <h4 style="color: rgba(255,255,255,0.5); text-align: center; margin-bottom: 1.5rem; font-family: 'Orbitron', sans-serif; letter-spacing: 2px; font-size: 0.9rem;">LIVE TICKETS</h4>
+
+                        <div id="liveBetsList" style="display: flex; flex-direction: column; gap: 0.8rem;">
+                        </div>
+                    </div>
+            </div>
+
+            <div id="marketClosedArea" style="text-align: center; padding: 3rem 1rem; display: none;">
+                <h3 style="color: rgba(255,255,255,0.5); font-family: 'Orbitron', sans-serif; letter-spacing: 2px;">AUCUN PARI EN COURS</h3>
+                <p style="color: rgba(255,255,255,0.4); margin-top: 10px;">Attendez qu'un pari soit lancé</p>
+            </div>
+            <div class="betting-card" id="adminPanel" style="display: none; margin-top: 2rem; border-color: #00d4ff;">
+                <h3 style="color: #00d4ff; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">CONTROLES ADMIN</h3>
+
+                <input type="password" id="adminTokenInput" class="bet-input" placeholder="Enter Admin Token" style="margin-bottom: 1rem;">
+
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                <select id="adminPlayerSelect" class="bet-input" style="flex: 1;">
+                    <option value="Heri">Heri</option>
+                    <option value="TheMisterED">TheMisterED</option>
+                    <option value="hhj">hhj</option>
+                    <option value="Djib">Djib</option>
+                    <option value="Graussbyt">Graussbyt</option>
+                    <option value="Lal6s9gne">Lal6s9gne</option>
+                    <option value="Xtrix">Xtrix</option>
+                    <option value="Vincent">Vincent</option>
+                </select>
+                
+                <select id="adminPropSelect" class="bet-input" style="flex: 1;">
+                    <option value="match_result">MATCH WIN/LOSS</option>
+                    <option value="kills">KILLS</option>
+                    <option value="deaths">DEATHS</option>
+                    <option value="kd_ratio">K/D RATIO</option>
+                </select>
+
+                <button class="bet-btn" onclick="previewPropBet()" style="flex: 1; background: #00d4ff; color: #020a13;">GENERATE</button>
+            </div>
+                <div id="adminPreviewBox" style="display: none; background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.2);">
+                    <p style="text-align: center; font-family: 'Orbitron', sans-serif; font-size: 1.2rem; margin-bottom: 10px;">
+                        <span id="previewPlayer">PLAYER</span> - <span id="previewType">KILLS</span>
+                    </p>
+                    <h2 style="text-align: center; color: white; margin-bottom: 10px;">LINE: <span id="previewLine">0.5</span></h2>
+                    <div style="display: flex; justify-content: space-around; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;">
+                        <span style="color: #00ff64;">OVER: <span id="previewOver">1.00x</span></span>
+                        <span style="color: #ff4655;">UNDER: <span id="previewUnder">1.00x</span></span>
+                    </div>
+                    <button class="bet-btn" onclick="publishPropBet()" style="width: 100%; margin-top: 1rem; background: #00ff88; color: black;">OPEN MARKET TO PUBLIC</button>
+                </div>
+                    <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                        <h4 style="color: white; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">ACTIVE MARKET CONTROLS</h4>
+
+                        <button class="bet-btn" onclick="lockPropMarket()" style="width: 100%; margin-bottom: 1rem; background: rgba(255, 170, 0, 0.1); border-color: #ffaa00; color: #ffaa00;">🔒 LOCK MARKET (STOP BETS)</button>
+
+                        <div style="display: flex; gap: 1rem;">
+                            <button class="bet-btn btn-win" onclick="resolvePropMarket('over')">RESOLVE: OVER WON</button>
+                            <button class="bet-btn btn-loss" onclick="resolvePropMarket('under')">RESOLVE: UNDER WON</button>
+                        </div>
+                    </div>
+                <p id="adminMessage" style="text-align: center; margin-top: 1rem; font-family: 'Rajdhani', sans-serif; font-weight: bold;"></p>
+            </div>
+        </section>
+
+    <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <img src="images/LogoTransparent.png" alt="" class="footer-logo-img" width="50" height="50" decoding="async">
+                <span class="footer-logo-text">FREDERIC FANCLUB</span>
+            </div>
+            <div class="footer-content">
+                © 2026 FRED Esports. Sharks in the Game.
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/site.js?v=livefeed4"></script>
+</body>
+</html>

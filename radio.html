@@ -229,25 +229,31 @@
 <body>
     <div class="bg-waves" aria-hidden="true"></div>
 
-    <nav>
+        <nav>
         <div class="container">
             <a href="index.html" class="nav-logo">
                 <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
                 <span class="nav-logo-text">FRED</span>
             </a>
+            
             <ul class="nav-links">
-                <li><a href="index.html">Home</a></li>
+                <li><a href="index.html"">Home</a></li>
                 <li><a href="index.html#roster">Roster</a></li>
                 <li><a href="index.html#about">About</a></li>
                 <li><a href="matches.html">Matches</a></li>
                 <li><a href="radio.html" class="nav-active">Radio</a></li>
+                <li><a href="betting.html">Betting</a></li> </ul>
             </ul>
+
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a href="https://api.fredericfan.club/api/auth/discord" class="login-btn">Login with Discord</a>
+            </div>
+
         </div>
     </nav>
-
     <header class="page-hero fade-in">
         <div>
-            <h1>FRED 24/7 RADIO</h1>
+            <h1>FREDDO RADIO</h1>
         </div>
     </header>
 
@@ -299,7 +305,8 @@
             { title: "Quentin Crosshair Clean", src: "audio/Quentin Crosshair Clean.mp3", duration: 210},
             { title: "THEMISTERED", src: "audio/THEMISTERED.mp3", duration: 242},
             { title: "Vincivincent", src: "audio/Vincivincent.mp3", duration: 200},
-            { title: "Je Mange Corinne", src: "audio/Je Mange Corinne.mp3", duration: 232}
+            { title: "Je Mange Corinne", src: "audio/Je Mange Corinne.mp3", duration: 232},
+            { title: "Laklak", src: "audio/Laklak.mp3", duration: 169}
         ];
 
         // --- 2. RADIO LOGIC ---
@@ -480,7 +487,6 @@
             }
         }
     </script>
-
-    <script src="js/site.js"></script>
+    <script src="js/site.js?v=casino3"></script>
 </body>
 </html>
