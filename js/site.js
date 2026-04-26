@@ -654,6 +654,117 @@ function initMatchFilters(body, matchList, statusEl, apiBase) {
     syncLoadMoreButton();
 }
 
+// --- MATCH UI RENDERER (FINAL RR FIX) ---
+function renderRosterMatchRow(entry, selectedSet) {
+    const matchData = entry.match || {};
+    const meta = matchData.metadata || {};
+    const roster = entry.roster || [];
+
+    const mapName = typeof meta.map === 'object' ? meta.map.name : (meta.map || 'Unknown Map');
+    const mode = meta.mode || 'Unrated';
+
+    // 1. EXACT PLAYER TARGETING
+    let targetFred = roster[0]; 
+    if (selectedSet && roster.length > 0) {
+        const filteredRoster = roster.filter(r => selectedSet.has(playerKeyJs(r.name, r.tag)));
+        if (filteredRoster.length > 0) {
+            targetFred = filteredRoster[0];
+        }
+    }
+
+    let matchClass = "draw";
+    let rrDelta = null;
+
+    if (targetFred) {
+        const outcome = outcomeForPlayer(matchData, targetFred.name, targetFred.tag);
+        if (outcome === 'win') matchClass = 'win';
+        else if (outcome === 'loss') matchClass = 'loss';
+
+        // 2. THE PLOT TWIST RR EXTRACTION!
+        // Look exactly where your Go server is putting it: the 'rrByPlayer' envelope!
+        if (entry.rrByPlayer) {
+            const searchKey = `${targetFred.name}#${targetFred.tag}`.toLowerCase();
+            if (entry.rrByPlayer[searchKey] !== undefined) {
+                rrDelta = entry.rrByPlayer[searchKey];
+            }
+        }
+        
+        // Fallback just in case HenrikDev attached it the old way
+        if (rrDelta === null) {
+            rrDelta = ratingDeltaForPlayer(matchData, targetFred.name, targetFred.tag);
+        }
+    }
+
+    // 3. SCORE SORTING
+    let score = "-";
+    let redRounds = 0, blueRounds = 0;
+
+    if (Array.isArray(matchData.teams)) {
+        const redTeam = matchData.teams.find(t => t.team_id === 'Red');
+        const blueTeam = matchData.teams.find(t => t.team_id === 'Blue');
+        if (redTeam && blueTeam) { redRounds = redTeam.rounds_won; blueRounds = blueTeam.rounds_won; }
+    } else if (matchData.teams && matchData.teams.red && matchData.teams.blue) {
+        redRounds = matchData.teams.red.rounds_won; blueRounds = matchData.teams.blue.rounds_won;
+    }
+
+    if (redRounds !== 0 || blueRounds !== 0) {
+        const higher = Math.max(redRounds, blueRounds);
+        const lower = Math.min(redRounds, blueRounds);
+        
+        if (matchClass === 'win') {
+            score = `<span style="color: #00ff64">${higher}</span> - <span style="color: #ff4655">${lower}</span>`;
+        } else if (matchClass === 'loss') {
+            score = `<span style="color: #ff4655">${lower}</span> - <span style="color: #00ff64">${higher}</span>`;
+        } else {
+            score = `<span style="color: #aaaaaa">${blueRounds} - ${redRounds}</span>`;
+        }
+    }
+
+    // 4. BUILD THE RR DISPLAY
+    let rrHTML = `<div style="width: 80px;"></div>`; 
+    if (rrDelta !== null) {
+        const sign = rrDelta > 0 ? "+" : "";
+        const rrColor = rrDelta > 0 ? "#00ff64" : rrDelta < 0 ? "#ff4655" : "#aaaaaa";
+        rrHTML = `<div style="color: ${rrColor}; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.1rem; width: 80px; text-align: right;">${sign}${rrDelta} RR</div>`;
+    } else if (isCompetitiveMode(mode)) {
+        rrHTML = `<div style="color: #aaaaaa; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.1rem; width: 80px; text-align: right;">RR —</div>`;
+    }
+
+    // 5. ROSTER HTML (Highlights the active player)
+    let rosterHTML = "";
+    if (roster.length > 0) {
+        const names = roster.map(r => {
+            if (targetFred && r.name === targetFred.name) {
+                return `<span style="color: #fff; font-weight: bold;">${escapeHtml(r.name)}</span>`;
+            }
+            return escapeHtml(r.name);
+        }).join(', ');
+        rosterHTML = `<div style="color: #00d4ff; font-size: 0.8rem; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px;">👥 ${names}</div>`;
+    }
+
+    // 6. ASSEMBLE HTML
+    const li = document.createElement('li');
+    li.className = `match-row ${matchClass}`;
+    const borderColor = matchClass === 'win' ? '#00ff64' : matchClass === 'loss' ? '#ff4655' : '#aaaaaa';
+    li.style.cssText = `display: flex; flex-direction: column; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 8px; background: rgba(0,0,0,0.3); border-left: 4px solid ${borderColor}; border-radius: 4px;`;
+    
+    li.innerHTML = `
+        ${rosterHTML}
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div class="match-info" style="flex: 1;">
+                <strong style="color: white; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; text-transform: uppercase;">${escapeHtml(mapName)}</strong>
+                <span style="color: rgba(255,255,255,0.4); font-size: 0.85rem; margin-left: 10px; text-transform: uppercase;">${escapeHtml(mode)}</span>
+            </div>
+            <div class="match-score" style="color: white; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.25rem; letter-spacing: 2px; text-align: center; flex: 1;">
+                ${score}
+            </div>
+            ${rrHTML}
+        </div>
+    `;
+
+    return li;
+}
+
 async function loadMatchHistory(matchList, statusEl) {
     const meta = document.querySelector('meta[name="fred-api-base"]');
     const apiBase = ((meta && meta.getAttribute('content')) || '').replace(/\/$/, '');

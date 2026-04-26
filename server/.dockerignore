@@ -1,0 +1,4 @@
+.env
+fred.db
+data/
+*.exe
