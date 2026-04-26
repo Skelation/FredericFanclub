@@ -1,3 +1,11 @@
+// --- AUTO ENVIRONMENT DETECTOR ---
+function getApiBase() {
+    if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+        return "http://localhost:8080";
+    }
+    return "https://api.fredericfan.club";
+}
+
 (function () {
     const observerOptions = {
         threshold: 0.1,
@@ -49,7 +57,7 @@
 
         // Make sure we have the API URL
         const meta = document.querySelector('meta[name="fred-api-base"]');
-        const apiBase = ((meta && meta.getAttribute('content')) || 'https://api.fredericfan.club').replace(/\/$/, '');
+        const apiBase = getApiBase();
 
         try {
             // Fetch the profile. "credentials: 'include'" is CRITICAL so it sends the cookie!
@@ -767,7 +775,7 @@ function renderRosterMatchRow(entry, selectedSet) {
 
 async function loadMatchHistory(matchList, statusEl) {
     const meta = document.querySelector('meta[name="fred-api-base"]');
-    const apiBase = ((meta && meta.getAttribute('content')) || '').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     statusEl.classList.remove('match-fetch-status--error');
 
@@ -838,7 +846,7 @@ async function loadBettingMarket() {
     
     widget.style.display = 'block';
 
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
     
     try {
         // NEW: Fetching the single event market!
@@ -972,7 +980,7 @@ window.placePropBet = async function(choice) {
         return;
     }
 
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
     msgEl.style.color = "white";
     msgEl.textContent = "Placing bet...";
 
@@ -1017,7 +1025,7 @@ window.previewPropBet = async function() {
     const player = document.getElementById('adminPlayerSelect').value;
     const propType = document.getElementById('adminPropSelect').value; // Grab the prop type!
     const msgEl = document.getElementById('adminMessage');
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     msgEl.style.color = "white";
     msgEl.textContent = "Crunching historical stats...";
@@ -1057,7 +1065,7 @@ window.previewPropBet = async function() {
 window.publishPropBet = async function() {
     if (!pendingPreview) return;
     const token = document.getElementById('adminTokenInput').value;
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     try {
         const res = await fetch(`${apiBase}/api/admin/publish-prop`, {
@@ -1080,7 +1088,7 @@ window.publishPropBet = async function() {
 window.lockPropMarket = async function() {
     const token = document.getElementById('adminTokenInput').value;
     const msgEl = document.getElementById('adminMessage');
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     try {
         const res = await fetch(`${apiBase}/api/admin/lock-prop`, {
@@ -1106,7 +1114,7 @@ window.resolvePropMarket = async function(outcome) {
 
     const token = document.getElementById('adminTokenInput').value;
     const msgEl = document.getElementById('adminMessage');
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     try {
         const res = await fetch(`${apiBase}/api/admin/resolve-prop`, {
@@ -1135,7 +1143,7 @@ window.fetchAdminUsers = async function() {
     const token = document.getElementById('adminTokenInput').value;
     if (!token) return;
 
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
     
     try {
         const res = await fetch(`${apiBase}/api/admin/users`, {
@@ -1164,7 +1172,7 @@ window.linkUserToPlayer = async function() {
     const discordId = document.getElementById('adminUserSelect').value;
     const player = document.getElementById('adminLinkPlayerSelect').value;
     const msgEl = document.getElementById('adminMessage');
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     try {
         const res = await fetch(`${apiBase}/api/admin/link-user`, {
@@ -1192,7 +1200,7 @@ window.cancelEntireMarket = async function() {
 
     const token = document.getElementById('adminTokenInput').value;
     const msgEl = document.getElementById('adminMessage');
-    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    const apiBase = getApiBase();
 
     msgEl.style.color = "white";
     msgEl.textContent = "Refunding all users...";

@@ -155,20 +155,39 @@ func main() {
 			return
 		}
 
-		// Set a secure cookie so your frontend knows who is logged in
+		// --- DYNAMIC COOKIE & REDIRECT FIX ---
+		frontendURL := strings.TrimSpace(os.Getenv("FRONTEND_URL"))
+		if frontendURL == "" {
+			frontendURL = "https://fredericfan.club" // Fallback
+		}
+
+		// Check if we are in the Dev Universe
+		isDev := strings.Contains(frontendURL, "localhost") || strings.Contains(frontendURL, "127.0.0.1")
+		
+		cookieDomain := ".fredericfan.club"
+		secureCookie := true
+		sameSitePolicy := http.SameSiteNoneMode // Default to Prod
+
+		if isDev {
+			cookieDomain = ""                     // Localhost doesn't like strict domains
+			secureCookie = false                  // Localhost isn't HTTPS
+			sameSitePolicy = http.SameSiteLaxMode // CRITICAL: Browsers block SameSite=None without Secure=true!
+		}
+
+		// Set the secure (or dev) cookie
 		http.SetCookie(w, &http.Cookie{
 			Name:     "fred_user_id",
 			Value:    discordUser.ID,
 			Path:     "/",
-			Domain:   ".fredericfan.club", // NEW: Shares cookie with frontend
+			Domain:   cookieDomain,
 			HttpOnly: false,
-			Secure:   true,                // NEW: Required for modern browsers
-			SameSite: http.SameSiteNoneMode, // NEW: Allows cross-subdomain sharing
+			Secure:   secureCookie,
+			SameSite: sameSitePolicy,
 			MaxAge:   86400 * 30, 
 		})
 
-		// Redirect them back to the homepage
-		http.Redirect(w, r, "https://fredericfan.club/", http.StatusTemporaryRedirect)
+		// Dynamically redirect them back to wherever they came from
+		http.Redirect(w, r, frontendURL+"/", http.StatusTemporaryRedirect)
 	})
 
 	// ==========================================
