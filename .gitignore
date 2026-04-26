@@ -1,5 +1,24 @@
+# Dependency folders
 node_modules/
-fred-api-server.exe
+dist/
+
+# Databases & Cache (Vital to ignore!)
+*.db
+*.db-journal
+server/data/
+
+# Environment Secrets (Crucial for GitHub safety)
 .env
-server/data
-server/fred.db
+.env.prod
+server/.env
+server/.env.prod
+
+# Compiled Binaries & System files
+*.exe
+server/server.exe
+server/fred-api-server.exe
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore

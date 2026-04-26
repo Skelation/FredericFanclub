@@ -851,7 +851,14 @@ func initOAuth() {
 
 func initDB() {
 	var err error
-	DB, err = sql.Open("sqlite3", "./fred.db")
+    
+	// NEW: Check the .env file for a database path. Default to fred.db if none exists.
+	dbPath := strings.TrimSpace(os.Getenv("DB_PATH"))
+	if dbPath == "" {
+		dbPath = "./fred.db"
+	}
+
+	DB, err = sql.Open("sqlite3", dbPath)
 	if err != nil {
 		log.Fatal("Failed to open database:", err)
 	}
