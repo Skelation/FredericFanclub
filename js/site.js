@@ -787,7 +787,7 @@ async function loadBettingMarket() {
                                 <span style="font-weight: 700; color: white; font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">${escapeHtml(bet.username)}</span>
                             </div>
                             <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">
-                                <span style="color: rgba(255,255,255,0.5); margin-right: 8px;">Bet</span>
+                                <span style="color: rgba(255,255,255,0.3); font-size: 0.85rem; margin-right: 8px;">#${bet.id}</span>
                                 <span style="color: ${choiceColor}; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-right: 12px;">${escapeHtml(bet.choice)}</span>
                                 <span style="color: #00d4ff; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1rem;">${amountFormatted} FT</span>
                             </div>
@@ -1012,6 +1012,95 @@ window.resolvePropMarket = async function(outcome) {
         } else {
             msgEl.style.color = "#ff4655";
             msgEl.textContent = data.error || "Failed to resolve.";
+        }
+    } catch (e) {
+        msgEl.textContent = "Network error.";
+    }
+};
+
+let usersLoaded = false;
+window.fetchAdminUsers = async function() {
+    if (usersLoaded) return; // Only fetch once
+    const token = document.getElementById('adminTokenInput').value;
+    if (!token) return;
+
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+    
+    try {
+        const res = await fetch(`${apiBase}/api/admin/users`, {
+            headers: { 'X-Admin-Token': token }
+        });
+        if (res.ok) {
+            const users = await res.json();
+            const select = document.getElementById('adminUserSelect');
+            select.innerHTML = ''; // Clear loading text
+            
+            users.forEach(u => {
+                const opt = document.createElement('option');
+                opt.value = u.DiscordID;
+                opt.textContent = `${u.Username} (Linked: ${u.Linked})`;
+                select.appendChild(opt);
+            });
+            usersLoaded = true;
+        }
+    } catch (e) {
+        console.error("Failed to load users");
+    }
+}
+
+window.linkUserToPlayer = async function() {
+    const token = document.getElementById('adminTokenInput').value;
+    const discordId = document.getElementById('adminUserSelect').value;
+    const player = document.getElementById('adminLinkPlayerSelect').value;
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/link-user`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ discord_id: discordId, player: player })
+        });
+        const data = await res.json();
+        if (res.ok) {
+            msgEl.style.color = "#00ff64";
+            msgEl.textContent = data.message;
+            usersLoaded = false; // Force refresh the dropdown next time they click it
+            fetchAdminUsers();
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = data.error;
+        }
+    } catch (e) {
+        msgEl.textContent = "Network error.";
+    }
+}
+
+window.cancelEntireMarket = async function() {
+    if (!confirm("🚨 ABORT MARKET? This will instantly cancel the event and mass-refund everyone's Fredtokens. Are you sure?")) return;
+
+    const token = document.getElementById('adminTokenInput').value;
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = document.querySelector('meta[name="fred-api-base"]').getAttribute('content').replace(/\/$/, '');
+
+    msgEl.style.color = "white";
+    msgEl.textContent = "Refunding all users...";
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/cancel-market`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token }
+        });
+        const data = await res.json();
+        
+        if (res.ok) {
+            msgEl.style.color = "#00ff64";
+            msgEl.textContent = data.message;
+            loadBettingMarket(); // UI returns to the grey "No Active Proposition" screen
+            loadUserProfile();   // Instantly updates your own wallet if you had a bet placed!
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = data.error || "Failed to cancel market.";
         }
     } catch (e) {
         msgEl.textContent = "Network error.";

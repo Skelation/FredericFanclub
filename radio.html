@@ -294,22 +294,65 @@
     </footer>
 
     <script>
-        // --- 1. CONFIGURATION ---
-        // Add all your songs here. 
-        // CRITICAL: The 'duration' must be the EXACT length of the audio file in seconds.
-        // Shuffle this array once however you like; it will act as a randomized, infinite loop.
-        const playlist = [
-            { title: "Heals Everywhere", src: "audio/Heals Everywhere.mp3", duration: 175 }, // Example: 3 mins
+        // --- 1. LIBRARIES ---
+        // Your music tracks
+        const musicLibrary = [
+            { title: "Heals Everywhere", src: "audio/Heals Everywhere.mp3", duration: 175 },
             { title: "Lasagne Cam Scan", src: "audio/Lasagne Cam Scan.mp3", duration: 166},
             { title: "Oh Graussbyt", src: "audio/Oh Graussbyt.mp3", duration: 121},
             { title: "Quentin Crosshair Clean", src: "audio/Quentin Crosshair Clean.mp3", duration: 210},
             { title: "THEMISTERED", src: "audio/THEMISTERED.mp3", duration: 242},
             { title: "Vincivincent", src: "audio/Vincivincent.mp3", duration: 200},
             { title: "Je Mange Corinne", src: "audio/Je Mange Corinne.mp3", duration: 232},
-            { title: "Laklak", src: "audio/Laklak.mp3", duration: 169}
+            { title: "Laklak", src: "audio/Laklak.mp3", duration: 169},
+            { title: "DEFUSE THE SPIKE", src: "audio/DEFUSE THE SPIKE.mp3", duration: 199},
+            { title: "Oh Fred The Musical", src: "audio/Oh Fred The Musical.mp3", duration: 219},
+            { title: "En Route Pour Les VCT", src: "audio/En Route Pour Les VCT.mp3", duration: 195}
         ];
 
-        // --- 2. RADIO LOGIC ---
+        // NEW: Add your intermissions here! 
+        // (Make sure to update the 'src' to your real audio files, and duration to the exact seconds)
+        const intermissionLibrary = [
+            { title: "En Direct de Freddo Radio", src: "audio/intermissions/EnDirectDe.mp3", duration: 2, isIntermission: true },
+            { title: "Freddy Freddo Radio", src: "audio/intermissions/FreddyFreddoRadio.mp3", duration: 3, isIntermission: true },
+            { title: "GPS Freddo", src: "audio/intermissions/gpsFreddo.mp3", duration: 7, isIntermission: true },
+            { title: "Menu Freddo", src: "audio/intermissions/menuFreddo.mp3", duration: 7, isIntermission: true },
+            { title: "Canape Freddo", src: "audio/intermissions/canapeFreddo.mp3", duration: 6, isIntermission: true },
+            { title: "Travail Freddo", src: "audio/intermissions/TravailFreddo.mp3", duration: 12, isIntermission: true }
+        ];
+
+        // --- 2. THE PLAYLIST WEAVER (UPGRADED) ---
+        const playlist = [];
+        let songsSinceLast = 0;
+        let intermissionCounter = 0;
+
+        // How many times do we need to loop the music to hear EVERY ad?
+        // If we play an ad every 3 songs, we need (Total Ads * 3) total songs.
+        const songsNeeded = intermissionLibrary.length * 3;
+        
+        // Calculate how many times we must loop the music library to hit that number
+        // (Ensure we loop at least once!)
+        const musicLoops = Math.max(1, Math.ceil(songsNeeded / musicLibrary.length));
+
+        // Build a massive, synced playlist!
+        for (let loop = 0; loop < musicLoops; loop++) {
+            for (let i = 0; i < musicLibrary.length; i++) {
+                playlist.push(musicLibrary[i]); 
+                songsSinceLast++;
+
+                // Every 3 songs, inject the next intermission
+                if (songsSinceLast >= 3 && intermissionLibrary.length > 0) {
+                    // Grab the next ad, and wrap around if we run out
+                    const nextAd = intermissionLibrary[intermissionCounter % intermissionLibrary.length];
+                    playlist.push(nextAd);
+                    
+                    intermissionCounter++;
+                    songsSinceLast = 0; 
+                }
+            }
+        }
+
+        // --- 3. RADIO LOGIC ---
         const audio = new Audio();
         let isPlaying = false;
         let currentTrackIndex = -1;
@@ -320,12 +363,10 @@
         const statusEl = document.getElementById('radioStatus');
         const progressBar = document.getElementById('radioProgressBar');
 
-        // Calculates exactly what song should be playing right now based on global time
         function getGlobalRadioState() {
-            const now = Math.floor(Date.now() / 1000); // Current Unix time in seconds
+            const now = Math.floor(Date.now() / 1000); 
             const totalDuration = playlist.reduce((sum, track) => sum + track.duration, 0);
             
-            // Where are we in the infinite loop of the playlist?
             let cycleTime = now % totalDuration;
 
             let elapsed = 0;
@@ -348,9 +389,11 @@
 
             // Update UI
             currentTrackEl.textContent = state.track.title;
+            // NEW: Turn the title Orange if it's an intermission!
+            currentTrackEl.style.color = state.track.isIntermission ? "#ffaa00" : "#fff";
+            
             progressBar.style.width = ((state.offset / state.track.duration) * 100) + '%';
 
-            // If the calculated track is different from what's playing, switch it
             if (currentTrackIndex !== state.index) {
                 audio.src = state.track.src;
                 currentTrackIndex = state.index;
@@ -361,9 +404,8 @@
                 });
                 highlightCurrentTrack(state.index);
             } 
-            // If the same track is playing, check if we drifted out of sync (e.g. user computer lagged)
             else if (Math.abs(audio.currentTime - state.offset) > 2) {
-                audio.currentTime = state.offset; // Correct drift
+                audio.currentTime = state.offset; 
             }
         }
 
@@ -374,7 +416,6 @@
             tuneInBtn.textContent = 'Disconnect';
             tuneInBtn.classList.add('active');
             
-            // Force first sync immediately, then check every second
             const state = getGlobalRadioState();
             audio.src = state.track.src;
             currentTrackIndex = state.index;
@@ -400,6 +441,7 @@
             tuneInBtn.textContent = 'Tune In';
             tuneInBtn.classList.remove('active');
             currentTrackEl.textContent = 'Waiting to tune in...';
+            currentTrackEl.style.color = "#fff";
             progressBar.style.width = '0%';
             currentTrackIndex = -1;
 
@@ -407,52 +449,44 @@
         }
 
         tuneInBtn.addEventListener('click', () => {
-            if (isPlaying) {
-                stopRadio();
-            } else {
-                startRadio();
-            }
+            if (isPlaying) { stopRadio(); } else { startRadio(); }
         });
 
         // --- VOLUME LOGIC ---
         const volumeSlider = document.getElementById('volumeSlider');
         const volumeIcon = document.getElementById('volumeIcon');
 
-        // Set initial volume to whatever the slider defaults to (0.3)
         audio.volume = volumeSlider.value;
 
-        // Listen for changes on the slider
         volumeSlider.addEventListener('input', (e) => {
             const vol = parseFloat(e.target.value);
             audio.volume = vol;
-            
-            // Update the icon dynamically based on how loud it is
-            if (vol === 0) {
-                volumeIcon.textContent = '🔇';
-            } else if (vol < 0.5) {
-                volumeIcon.textContent = '🔉';
-            } else {
-                volumeIcon.textContent = '🔊';
-            }
+            if (vol === 0) { volumeIcon.textContent = '🔇'; } 
+            else if (vol < 0.5) { volumeIcon.textContent = '🔉'; } 
+            else { volumeIcon.textContent = '🔊'; }
         });
 
         // --- QUEUE LOGIC ---
         const queueListEl = document.getElementById('queueList');
 
-        // Helper to turn seconds into M:SS
         function formatTime(seconds) {
             const m = Math.floor(seconds / 60);
             const s = Math.floor(seconds % 60);
             return m + ':' + (s < 10 ? '0' : '') + s;
         }
 
-        // Render the list of songs
         function renderQueue() {
             queueListEl.innerHTML = '';
             playlist.forEach((track, index) => {
                 const li = document.createElement('li');
                 li.className = 'queue-item';
                 li.id = 'queue-item-' + index;
+                
+                // NEW: Style intermissions differently in the queue
+                if (track.isIntermission) {
+                    li.style.color = "#ffaa00";
+                    li.style.background = "rgba(255, 170, 0, 0.05)";
+                }
 
                 const titleSpan = document.createElement('span');
                 titleSpan.className = 'queue-item-title';
@@ -468,19 +502,15 @@
             });
         }
 
-        // Call immediately to draw the list
         renderQueue();
-
         const liveState = getGlobalRadioState();
         highlightCurrentTrack(liveState.index);
 
-        // Helper to highlight the active track in the queue
         function highlightCurrentTrack(index) {
             document.querySelectorAll('.queue-item').forEach(el => el.classList.remove('playing'));
             const activeItem = document.getElementById('queue-item-' + index);
             if (activeItem) {
                 activeItem.classList.add('playing');
-                // Optional: wait a tiny bit for the queue to render before scrolling
                 setTimeout(() => {
                     activeItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }, 100);

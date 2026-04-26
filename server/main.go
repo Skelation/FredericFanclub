@@ -77,9 +77,9 @@ func main() {
 		}
 
 		// 2. Look them up in the database
-		var username, avatar string
-		var tokens float64 // <--- FIX: Changed to float64 to prevent crashes!
-		err = DB.QueryRow("SELECT username, avatar_url, fredtokens FROM users WHERE discord_id = ?", cookie.Value).Scan(&username, &avatar, &tokens)
+		var username, avatar, linkedPlayer string
+		var tokens float64
+		err = DB.QueryRow("SELECT username, avatar_url, fredtokens, linked_player FROM users WHERE discord_id = ?", cookie.Value).Scan(&username, &avatar, &tokens, &linkedPlayer)
 
 		if err != nil {
 			http.Error(w, `{"error": "user not found in db"}`, http.StatusNotFound)
@@ -94,7 +94,7 @@ func main() {
 
 		// 4. Send the data back to the frontend!
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"username": "%s", "avatar_url": "%s", "fredtokens": %g}`, username, avatarURL, tokens) // <--- FIX: Formats the decimal away!
+		fmt.Fprintf(w, `{"username": "%s", "avatar_url": "%s", "fredtokens": %g, "linked_player": "%s"}`, username, avatarURL, tokens, linkedPlayer)
 	})
 
 	// --- AUTHENTICATION ROUTES ---
@@ -293,17 +293,35 @@ func main() {
 		}
 
 		var balance float64
-		err = tx.QueryRow("SELECT fredtokens FROM users WHERE discord_id = ?", discordID).Scan(&balance)
+		var linkedPlayer string // Check who they are!
+		err = tx.QueryRow("SELECT fredtokens, linked_player FROM users WHERE discord_id = ?", discordID).Scan(&balance, &linkedPlayer)
 		if err != nil || balance < req.Amount {
 			tx.Rollback()
 			http.Error(w, `{"error": "Not enough Fredtokens!"}`, http.StatusBadRequest)
 			return
 		}
 
-		// Deduct Tokens
+		// --- ANTI-CORRUPTION ENGINE ---
+		if linkedPlayer != "none" {
+			// Rule 1: Cannot bet on yourself
+			if strings.EqualFold(linkedPlayer, CurrentMarket.Player) {
+				tx.Rollback()
+				http.Error(w, `{"error": "Conflict of Interest: You cannot bet on your own performance!"}`, http.StatusForbidden)
+				return
+			}
+			// Rule 2: Roster players cannot bet on Team Matches
+			if CurrentMarket.Player == "FRED ESPORTS" {
+				tx.Rollback()
+				http.Error(w, `{"error": "Conflict of Interest: Roster players cannot bet on team matches!"}`, http.StatusForbidden)
+				return
+			}
+		}
+
+		// --- EXECUTE THE BET ---
+		// 1. Deduct Tokens
 		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - ? WHERE discord_id = ?", req.Amount, discordID)
 		
-		// Insert Detailed Bet Ticket!
+		// 2. Insert Detailed Bet Ticket
 		_, err = tx.Exec(`INSERT INTO bets 
 			(discord_id, bet_category, target_player, prop_type, line_value, choice, amount, locked_multiplier) 
 			VALUES (?, 'prop', ?, ?, ?, ?, ?, ?)`, 
@@ -357,7 +375,7 @@ func main() {
 		}
 		json.Unmarshal(dataBytes, &cacheData)
 
-		
+			
 	// --- UNIFIED STATS & WIN/LOSS CALCULATOR ---
 		var statsHistory []float64
 		totalMatches := 0.0
@@ -469,6 +487,71 @@ func main() {
 		json.NewEncoder(w).Encode(preview)
 	})
 
+	// ADMIN: Link a Discord User to a Roster Player
+	mux.HandleFunc("OPTIONS /api/admin/link-user", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/link-user", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			DiscordID string `json:"discord_id"`
+			Player    string `json:"player"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+
+		_, err := DB.Exec("UPDATE users SET linked_player = ? WHERE discord_id = ?", req.Player, req.DiscordID)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "User linked successfully!"}`)
+	})
+
+	// ADMIN: Get all users to populate the dropdown
+	
+	// --- FIX: Added the missing CORS Preflight route! ---
+	mux.HandleFunc("OPTIONS /api/admin/users", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/admin/users", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		rows, err := DB.Query("SELECT discord_id, username, linked_player FROM users")
+		if err != nil {
+			http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type UserObj struct { DiscordID, Username, Linked string }
+		users := make([]UserObj, 0) // FIX: Prevents a 'null' array crash
+		for rows.Next() {
+			var u UserObj
+			rows.Scan(&u.DiscordID, &u.Username, &u.Linked)
+			users = append(users, u)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(users)
+	})
+
+
 	// ADMIN: Publish the previewed bet to the public!
 	mux.HandleFunc("OPTIONS /api/admin/publish-prop", func(w http.ResponseWriter, r *http.Request) {
 		applyCORS(w, r, allowed)
@@ -491,6 +574,62 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market is now LIVE!"}`)
+	})
+
+	// ADMIN: Abort the entire market and Mass Refund everyone!
+	mux.HandleFunc("OPTIONS /api/admin/cancel-market", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/cancel-market", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		if CurrentMarket == nil {
+			http.Error(w, `{"error": "No active market to cancel."}`, http.StatusBadRequest)
+			return
+		}
+
+		tx, err := DB.Begin()
+		if err != nil {
+			http.Error(w, `{"error": "Server error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Fetch ALL pending bets for the active market
+		rows, err := tx.Query("SELECT id, discord_id, amount FROM bets WHERE status = 'pending' AND bet_category = 'prop'")
+		if err == nil {
+			type Bet struct {
+				ID      int
+				Discord string
+				Amount  float64
+			}
+			var bets []Bet
+			for rows.Next() {
+				var b Bet
+				rows.Scan(&b.ID, &b.Discord, &b.Amount)
+				bets = append(bets, b)
+			}
+			rows.Close()
+
+			// Mass Refund! Loop through and give everyone their money back
+			for _, b := range bets {
+				tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", b.Amount, b.Discord)
+				tx.Exec("UPDATE bets SET status = 'cancelled' WHERE id = ?", b.ID)
+			}
+		}
+
+		// Wipe the active market from the server
+		CurrentMarket = nil
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Market Aborted! All tokens refunded."}`)
 	})
 
 	// ADMIN: Lock the market (Stop new bets without clearing it)
@@ -723,6 +862,7 @@ func initDB() {
 		username TEXT,
 		avatar_url TEXT,
 		fredtokens INTEGER DEFAULT 1000,
+		linked_player TEXT DEFAULT 'none', -- NEW: Links account to roster player!
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
 

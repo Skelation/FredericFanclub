@@ -35,6 +35,7 @@
             <ul class="nav-links">
                 <li><a href="index.html">Home</a></li>
                 <li><a href="index.html#roster">Roster</a></li>
+                <li><a href="#about">À propos</a></li>
                 <li><a href="matches.html">Matches</a></li>
                 <li><a href="radio.html">Radio</a></li>
                 <li><a href="betting.html" class="nav-active">Betting</a></li>
@@ -124,17 +125,42 @@
                         <span style="color: #ff4655;">UNDER: <span id="previewUnder">1.00x</span></span>
                     </div>
                     <button class="bet-btn" onclick="publishPropBet()" style="width: 100%; margin-top: 1rem; background: #00ff88; color: black;">OPEN MARKET TO PUBLIC</button>
-                </div>
+                    </div>
                     <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
                         <h4 style="color: white; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">ACTIVE MARKET CONTROLS</h4>
 
                         <button class="bet-btn" onclick="lockPropMarket()" style="width: 100%; margin-bottom: 1rem; background: rgba(255, 170, 0, 0.1); border-color: #ffaa00; color: #ffaa00;">🔒 LOCK MARKET (STOP BETS)</button>
 
-                        <div style="display: flex; gap: 1rem;">
-                            <button class="bet-btn btn-win" onclick="resolvePropMarket('over')">RESOLVE: OVER WON</button>
-                            <button class="bet-btn btn-loss" onclick="resolvePropMarket('under')">RESOLVE: UNDER WON</button>
+                        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                            <button class="bet-btn btn-win" onclick="resolvePropMarket('over')">RESOLVE: OVER / WIN</button>
+                            <button class="bet-btn btn-loss" onclick="resolvePropMarket('under')">RESOLVE: UNDER / LOSS</button>
                         </div>
+
+                        <button class="bet-btn" onclick="cancelEntireMarket()" style="width: 100%; background: transparent; border: 1px solid #ff4655; color: #ff4655;">🚨 ABORT MARKET & REFUND ALL 🚨</button>
                     </div>
+                    <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                <h4 style="color: white; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">ROSTER MANAGEMENT</h4>
+                
+                <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                    <select id="adminUserSelect" class="bet-input" style="flex: 1;" onclick="fetchAdminUsers()">
+                        <option value="">Click to load users...</option>
+                    </select>
+                    
+                    <select id="adminLinkPlayerSelect" class="bet-input" style="flex: 1;">
+                        <option value="none">FAN (No restrictions)</option>
+                        <option value="Heri">Heri</option>
+                        <option value="TheMisterED">TheMisterED</option>
+                        <option value="hhj">hhj</option>
+                        <option value="Djib">Djib</option>
+                        <option value="Graussbyt">Graussbyt</option>
+                        <option value="Lal6s9gne">Lal6s9gne</option>
+                        <option value="Xtrix">Xtrix</option>
+                        <option value="Vincent">Vincent</option>
+                    </select>
+
+                    <button class="bet-btn" onclick="linkUserToPlayer()" style="flex: 1; background: #00ff64; color: black;">LINK USER</button>
+                </div>
+            </div>
                 <p id="adminMessage" style="text-align: center; margin-top: 1rem; font-family: 'Rajdhani', sans-serif; font-weight: bold;"></p>
             </div>
         </section>
@@ -151,6 +177,6 @@
         </div>
     </footer>
 
-    <script src="js/site.js?v=livefeed4"></script>
+    <script src="js/site.js?v=adminvoid2"></script>
 </body>
 </html>
