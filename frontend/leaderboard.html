@@ -103,8 +103,24 @@
         .rank-3 .player-name { color: #cd7f32; }
 
     </style>
-</head>
 <body>
+</head>
+    <script>
+        // Set this to true on launch day!
+        const IS_LAUNCHED = false; 
+
+        if (!IS_LAUNCHED) {
+            document.write(`
+                <div style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020a13; z-index: 999999; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Orbitron', sans-serif;">
+                    <img src="images/LogoTransparent.png" style="width: 100px; margin-bottom: 20px; filter: drop-shadow(0 0 20px #00d4ff);">
+                    <h1 style="color: white; font-size: 3rem; text-transform: uppercase; letter-spacing: 5px; margin: 0;">System Encrypted</h1>
+                    <p style="color: #00d4ff; font-family: 'Rajdhani', sans-serif; font-size: 1.5rem; margin-top: 10px;">The FRED Trading Card Protocol unlocks in a few days.</p>
+                    <a href="index.html" style="margin-top: 30px; padding: 10px 30px; background: #ff4655; color: white; text-decoration: none; font-weight: bold; border-radius: 4px;">RETURN TO BASE</a>
+                </div>
+            `);
+            window.stop(); // Instantly stops the rest of the HTML/JS from loading!
+        }
+    </script>
     <div class="bg-waves" aria-hidden="true"></div>
 
     <nav>
