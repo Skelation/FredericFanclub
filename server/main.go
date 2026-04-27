@@ -260,7 +260,298 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, cardName, cardRarity, cardImage)
 	})
-	
+
+	// GET: Fetch a user's card inventory
+	mux.HandleFunc("OPTIONS /api/inventory", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/inventory", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// ADDED: c.id (so we can shred it) AND i.quantity > 0 (so empty cards vanish)
+		query := `
+			SELECT c.id, c.name, c.rarity, c.image_url, i.quantity
+			FROM inventory i
+			JOIN cards c ON i.card_id = c.id
+			WHERE i.discord_id = ? AND i.quantity > 0
+			ORDER BY 
+				CASE c.rarity 
+					WHEN 'radiant' THEN 1 
+					WHEN 'immortal' THEN 2 
+					WHEN 'ascendant' THEN 3 
+					WHEN 'diamond' THEN 4 
+					WHEN 'bronze' THEN 5 
+					WHEN 'iron' THEN 6 
+					ELSE 7 
+				END, c.name ASC`
+
+		rows, err := DB.Query(query, userID)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type InventoryItem struct {
+			ID       int    `json:"id"`
+			Name     string `json:"name"`
+			Rarity   string `json:"rarity"`
+			ImageURL string `json:"image_url"`
+			Quantity int    `json:"quantity"`
+		}
+
+		var items []InventoryItem
+		for rows.Next() {
+			var item InventoryItem
+			rows.Scan(&item.ID, &item.Name, &item.Rarity, &item.ImageURL, &item.Quantity)
+			items = append(items, item)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(items)
+	})
+
+	// GET: Fetch the COMPLETE catalog of all cards and check if the user owns them
+	mux.HandleFunc("OPTIONS /api/catalog", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/catalog", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		
+		userID := getUserIDFromCookie(r)
+		// Note: If userID is empty (not logged in), the LEFT JOIN still works perfectly, 
+		// it will just return 0 quantity for everything (all locked)!
+
+		query := `
+			SELECT c.id, c.name, c.rarity, c.image_url, c.season, COALESCE(i.quantity, 0) as quantity
+			FROM cards c
+			LEFT JOIN inventory i ON c.id = i.card_id AND i.discord_id = ?
+			ORDER BY c.season ASC, 
+				CASE c.rarity 
+					WHEN 'radiant' THEN 1 
+					WHEN 'immortal' THEN 2 
+					WHEN 'ascendant' THEN 3 
+					WHEN 'diamond' THEN 4 
+					WHEN 'bronze' THEN 5 
+					WHEN 'iron' THEN 6 
+					ELSE 7 
+				END, c.name ASC`
+
+		rows, err := DB.Query(query, userID)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		type CatalogItem struct {
+			ID       int    `json:"id"`
+			Name     string `json:"name"`
+			Rarity   string `json:"rarity"`
+			ImageURL string `json:"image_url"`
+			Season   string `json:"season"` // NEW!
+			Unlocked bool   `json:"unlocked"`
+		}
+
+		var items []CatalogItem
+		for rows.Next() {
+			var item CatalogItem
+			var quantity int
+			rows.Scan(&item.ID, &item.Name, &item.Rarity, &item.ImageURL, &item.Season, &quantity)
+			item.Unlocked = quantity > 0
+			items = append(items, item)
+		}
+		
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(items)
+	})
+
+	// POST: CS:GO Style Trade-Up Contract (5 -> 1)
+	mux.HandleFunc("OPTIONS /api/economy/trade-up", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/economy/trade-up", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct { CardIDs []int `json:"card_ids"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		if len(req.CardIDs) != 5 {
+			http.Error(w, `{"error": "You must provide exactly 5 cards!"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Count how many of each specific card they are trying to burn
+		required := make(map[int]int)
+		for _, id := range req.CardIDs {
+			required[id]++
+		}
+
+		tx, _ := DB.Begin()
+		defer tx.Rollback() // Safety net: aborts everything if we don't hit tx.Commit()
+
+		var commonRarity string
+
+		// 1. Verify ownership, quantity, and uniform rarity
+		for cardID, qtyNeeded := range required {
+			var ownedQty int
+			var rarity string
+			err := tx.QueryRow("SELECT i.quantity, c.rarity FROM inventory i JOIN cards c ON i.card_id = c.id WHERE i.discord_id = ? AND i.card_id = ?", userID, cardID).Scan(&ownedQty, &rarity)
+			
+			if err != nil || ownedQty < qtyNeeded {
+				http.Error(w, `{"error": "You do not own enough of these cards!"}`, http.StatusBadRequest)
+				return
+			}
+
+			if commonRarity == "" {
+				commonRarity = rarity
+			} else if commonRarity != rarity {
+				http.Error(w, `{"error": "All 5 cards must be the exact same rarity!"}`, http.StatusBadRequest)
+				return
+			}
+		}
+
+		// 2. Determine the NEXT rarity tier
+		tierList := []string{"iron", "bronze", "diamond", "ascendant", "immortal", "radiant"}
+		var nextRarity string
+		for i, r := range tierList {
+			if r == commonRarity {
+				if i+1 < len(tierList) {
+					nextRarity = tierList[i+1]
+				}
+				break
+			}
+		}
+
+		if nextRarity == "" {
+			http.Error(w, `{"error": "You cannot trade up Radiant cards!"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 3. Pull 1 random card of the next rarity
+		var winCardID int
+		var winName, winRarity, winImage string
+		err := tx.QueryRow("SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? ORDER BY RANDOM() LIMIT 1", nextRarity).Scan(&winCardID, &winName, &winRarity, &winImage)
+		
+		if err != nil {
+			http.Error(w, `{"error": "The database has no cards in the next tier to give you!"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// 4. Burn the 5 sacrificed cards
+		for cardID, qtyNeeded := range required {
+			_, err = tx.Exec("UPDATE inventory SET quantity = quantity - ? WHERE discord_id = ? AND card_id = ?", qtyNeeded, userID, cardID)
+			if err != nil {
+				http.Error(w, `{"error": "Failed to burn cards"}`, http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// 5. Add the new Upgraded card
+		_, err = tx.Exec(`
+			INSERT INTO inventory (discord_id, card_id, quantity) 
+			VALUES (?, ?, 1)
+			ON CONFLICT(discord_id, card_id) DO UPDATE SET quantity = quantity + 1
+		`, userID, winCardID)
+		
+		if err != nil {
+			http.Error(w, `{"error": "Failed to grant new card"}`, http.StatusInternalServerError)
+			return
+		}
+
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, winName, winRarity, winImage)
+	})
+
+	// POST: Shred a card for Fredtokens
+	mux.HandleFunc("OPTIONS /api/economy/shred", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/economy/shred", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct { CardID int `json:"card_id"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 1. Verify they own the card and get its rarity
+		var rarity string
+		var quantity int
+		err := DB.QueryRow(`
+			SELECT c.rarity, i.quantity 
+			FROM inventory i 
+			JOIN cards c ON i.card_id = c.id 
+			WHERE i.discord_id = ? AND i.card_id = ? AND i.quantity > 0`, 
+			userID, req.CardID).Scan(&rarity, &quantity)
+
+		if err != nil {
+			http.Error(w, `{"error": "You do not own this card!"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 2. The Exchange Rates
+		payouts := map[string]int{
+			"iron": 20,
+			"bronze": 50,
+			"diamond": 200,
+			"ascendant": 500,
+			"immortal": 2500,
+			"radiant": 10000,
+		}
+		payoutAmount := payouts[rarity]
+
+		// 3. The Transaction
+		tx, _ := DB.Begin()
+		
+		// Deduct 1 card
+		_, err = tx.Exec("UPDATE inventory SET quantity = quantity - 1 WHERE discord_id = ? AND card_id = ?", userID, req.CardID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db failed"}`, 500); return }
+
+		// Add Tokens
+		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", payoutAmount, userID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db failed"}`, 500); return }
+
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "payout": %d, "remaining": %d}`, payoutAmount, quantity-1)
+	})
 	// ==========================================
 	// --- PREDICTION MARKET / BETTING ROUTES ---
 	// ==========================================
@@ -446,16 +737,20 @@ func main() {
 
 		var req struct {
 			Name     string `json:"name"`
-			Rarity   string `json:"rarity"` // 'blue', 'purple', 'pink', 'red'
+			Rarity   string `json:"rarity"` 
 			ImageURL string `json:"image_url"`
+			Season   string `json:"season"` // NEW!
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
 			return
 		}
 
+		// Default to Season 1 if they forget to type it
+		if req.Season == "" { req.Season = "Season 1" }
+
 		// Insert the new card into the catalog
-		result, err := DB.Exec("INSERT INTO cards (name, rarity, image_url) VALUES (?, ?, ?)", req.Name, req.Rarity, req.ImageURL)
+		result, err := DB.Exec("INSERT INTO cards (name, rarity, image_url, season) VALUES (?, ?, ?, ?)", req.Name, req.Rarity, req.ImageURL, req.Season)
 		if err != nil {
 			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
 			return
@@ -464,6 +759,43 @@ func main() {
 		newID, _ := result.LastInsertId()
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Card added!", "card_id": %d}`, newID)
+	})
+
+	// ADMIN: Delete a trading card permanently
+	mux.HandleFunc("OPTIONS /api/admin/delete-card", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/delete-card", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct { CardID int `json:"card_id"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Use a transaction to safely delete it from BOTH tables
+		tx, _ := DB.Begin()
+		
+		// 1. Remove from all user inventories so the app doesn't crash trying to load a ghost card
+		_, err := tx.Exec("DELETE FROM inventory WHERE card_id = ?", req.CardID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db error on inventory"}`, 500); return }
+
+		// 2. Delete the card itself from the catalog
+		_, err = tx.Exec("DELETE FROM cards WHERE id = ?", req.CardID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db error on cards"}`, 500); return }
+
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Card permanently deleted!"}`)
 	})
 
 	// ADMIN: Give Fredtokens to a specific user
@@ -1096,6 +1428,9 @@ func initDB() {
 
 	_, err = DB.Exec(createInventoryTable)
 	if err != nil { log.Fatal("Failed to create inventory table:", err) }
+
+	// --- DATABASE MIGRATION ---
+	DB.Exec("ALTER TABLE cards ADD COLUMN season TEXT DEFAULT 'Season 1'")
 
 	log.Println("Database initialized successfully!")
 }

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Collection - FRED Fanclub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .inventory-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 30px;
+            padding: 40px 0;
+        }
+        
+        .inventory-card-wrapper {
+            position: relative;
+            display: flex;
+            justify-content: center;
+            transition: transform 0.2s ease;
+        }
+        
+        .inventory-card-wrapper:hover {
+            transform: translateY(-8px);
+            cursor: pointer;
+        }
+
+        .quantity-badge {
+            position: absolute;
+            top: -10px;
+            right: -5px;
+            background: #ff4655;
+            color: white;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            font-size: 0.9rem;
+            padding: 6px 14px;
+            border-radius: 20px;
+            border: 2px solid #111;
+            z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+        }
+
+        /* --- FULL SCREEN MODAL CSS --- */
+        .card-modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.9);
+            backdrop-filter: blur(5px);
+            display: none; /* Hidden by default */
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 9999;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card-modal-overlay.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .modal-close-btn {
+            position: absolute;
+            top: 30px;
+            right: 40px;
+            color: white;
+            font-size: 3rem;
+            cursor: pointer;
+            font-family: sans-serif;
+            transition: transform 0.2s;
+        }
+        .modal-close-btn:hover { transform: scale(1.2); color: #ff4655; }
+
+        .shred-btn {
+            margin-top: 30px;
+            background: transparent;
+            border: 2px solid #ff4655;
+            color: #ff4655;
+            padding: 12px 30px;
+            font-family: 'Orbitron', sans-serif;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .shred-btn:hover {
+            background: #ff4655;
+            color: white;
+            box-shadow: 0 0 20px rgba(255, 70, 85, 0.5);
+        }
+        .shred-btn:disabled {
+            border-color: #555; color: #555; cursor: not-allowed; background: transparent; box-shadow: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="matches.html">Matches</a></li>
+                <li><a href="packs.html">Case</a></li>
+                <li><a href="inventory.html" class="nav-active">Collection</a></li>
+            </ul>
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>My Collection</h1>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="inventoryLoading" style="text-align: center; padding: 50px; color: #00d4ff; font-family: 'Orbitron', sans-serif;">
+            Fetching your secure vault...
+        </div>
+        
+        <div id="inventoryGrid" class="inventory-grid">
+            </div>
+    </main>
+
+    <div id="cardModal" class="card-modal-overlay">
+        <div class="modal-close-btn" onclick="closeModal()">&times;</div>
+        
+        <div id="modalCardDisplay"></div>
+        
+        <button id="btnShred" class="shred-btn" onclick="shredCard()">SHRED CARD</button>
+        <div id="shredMessage" style="margin-top: 15px; font-family: 'Rajdhani'; font-size: 1.2rem; color: #00ff64;"></div>
+    </div>
+
+    <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <img src="images/LogoTransparent.png" alt="" width="50" height="50">
+                <span class="footer-logo-text">FREDERIC FANCLUB</span>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/site.js"></script>
+    
+    <script>
+        // Store payout values so the UI knows what to say without asking the server
+        const SHRED_VALUES = {
+            "iron": 20, "bronze": 50, "diamond": 200, 
+            "ascendant": 500, "immortal": 2500, "radiant": 10000
+        };
+
+        let currentModalCard = null; // Remembers which card is currently open in full screen
+
+        async function loadInventory() {
+            const grid = document.getElementById('inventoryGrid');
+            const loading = document.getElementById('inventoryLoading');
+            grid.innerHTML = "";
+            loading.style.display = "block";
+            
+            try {
+                const res = await fetch(`${getApiBase()}/api/inventory`, { credentials: 'include' });
+                if (!res.ok) throw new Error("Not logged in");
+                
+                const cards = await res.json();
+                loading.style.display = "none";
+                
+                if (!cards || cards.length === 0) {
+                    grid.innerHTML = `
+                        <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 60px; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;">
+                            Your vault is empty. Go open some cases!
+                        </div>`;
+                    return;
+                }
+
+                cards.forEach(card => {
+                    let imgPath = card.image_url;
+                    if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'inventory-card-wrapper';
+                    
+                    // Click event to open the Full Screen Modal!
+                    wrapper.onclick = () => openModal(card, imgPath);
+                    
+                    let badgeHTML = '';
+                    if (card.quantity > 1) {
+                        badgeHTML = `<div class="quantity-badge">x${card.quantity}</div>`;
+                    }
+
+                    wrapper.innerHTML = `
+                        ${badgeHTML}
+                        <div class="tcg-card rarity-${card.rarity}" 
+                             style="width: 180px; height: 252px; font-size: 1.1rem;
+                                    background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
+                        </div>
+                    `;
+                    grid.appendChild(wrapper);
+                });
+
+            } catch (err) {
+                loading.innerHTML = `<span style="color: #ff4655;">Please log in to view your collection.</span>`;
+            }
+        }
+
+        // --- MODAL LOGIC ---
+        function openModal(card, imgPath) {
+            currentModalCard = card; // Save for the shredder
+            
+            const modal = document.getElementById('cardModal');
+            const display = document.getElementById('modalCardDisplay');
+            const btnShred = document.getElementById('btnShred');
+            const msg = document.getElementById('shredMessage');
+            
+            // Reset state
+            msg.textContent = "";
+            btnShred.disabled = false;
+            
+            // Draw the giant card!
+            display.innerHTML = `
+                <div class="tcg-card rarity-${card.rarity}" 
+                     style="width: 320px; height: 448px; font-size: 1.8rem; box-shadow: 0 0 50px rgba(0,0,0,0.8);
+                            background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 30%), url('${imgPath}');">
+                </div>
+            `;
+            
+            // Update the shred button text
+            const payout = SHRED_VALUES[card.rarity] || 0;
+            btnShred.innerText = `SHRED FOR ${payout} FT`;
+
+            modal.classList.add('active');
+        }
+
+        function closeModal() {
+            document.getElementById('cardModal').classList.remove('active');
+            currentModalCard = null;
+        }
+
+        // Close modal if they click the dark background outside the card
+        document.getElementById('cardModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal(); 
+        });
+
+        // --- SHREDDER LOGIC ---
+        async function shredCard() {
+            if (!currentModalCard) return;
+            
+            const btnShred = document.getElementById('btnShred');
+            const msg = document.getElementById('shredMessage');
+            
+            if (!confirm(`Are you sure you want to shred ${currentModalCard.name}?\nThis action cannot be undone.`)) return;
+
+            btnShred.disabled = true;
+            btnShred.innerText = "SHREDDING...";
+
+            try {
+                const res = await fetch(`${getApiBase()}/api/economy/shred`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ card_id: currentModalCard.id })
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    msg.style.color = "#00ff64";
+                    msg.textContent = `Card destroyed. +${data.payout} FT added to wallet!`;
+                    
+                    // Refresh the user's wallet in the top right
+                    if (typeof window.loadUserProfile === 'function') window.loadUserProfile();
+                    
+                    // Reload the grid in the background so it's updated when they close the modal
+                    loadInventory();
+
+                    // If they shredded their last copy, force close the modal after 2 seconds
+                    if (data.remaining <= 0) {
+                        setTimeout(() => closeModal(), 1500);
+                    } else {
+                        btnShred.disabled = false;
+                        btnShred.innerText = `SHRED ANOTHER (${SHRED_VALUES[currentModalCard.rarity]} FT)`;
+                    }
+                } else {
+                    msg.style.color = "#ff4655";
+                    msg.textContent = data.error || "Failed to shred card.";
+                    btnShred.disabled = false;
+                    btnShred.innerText = "TRY AGAIN";
+                }
+            } catch (err) {
+                msg.style.color = "#ff4655";
+                msg.textContent = "Network error.";
+                btnShred.disabled = false;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadInventory);
+    </script>
+</body>
+</html>

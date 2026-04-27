@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Index - FRED Fanclub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* --- TAB NAVIGATION --- */
+        .season-tabs {
+            display: flex; justify-content: center; gap: 15px; margin: 30px 0; flex-wrap: wrap;
+        }
+        .season-tab {
+            background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 10px 25px; border-radius: 30px; cursor: pointer;
+            font-family: 'Orbitron', sans-serif; font-size: 1.1rem; transition: all 0.3s;
+        }
+        .season-tab:hover { background: rgba(255,255,255,0.1); }
+        .season-tab.active { background: #00d4ff; color: #000; border-color: #00d4ff; box-shadow: 0 0 15px rgba(0, 212, 255, 0.5); font-weight: bold; }
+
+        /* --- RARITY SECTIONS --- */
+        .rarity-section { margin-bottom: 50px; }
+        .rarity-header {
+            font-family: 'Orbitron', sans-serif; font-size: 1.8rem; text-transform: uppercase;
+            border-bottom: 2px solid; padding-bottom: 10px; margin-bottom: 20px;
+            display: flex; justify-content: space-between; align-items: flex-end;
+        }
+        .rarity-header .stats { font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; color: #aaa; }
+
+        .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 30px; }
+        .catalog-card-wrapper { position: relative; display: flex; justify-content: center; transition: transform 0.3s ease; }
+
+        /* Locked CSS */
+        .card-locked .tcg-card { filter: grayscale(100%) brightness(0.25) blur(4px); transition: all 0.4s ease; border-color: #333 !important; box-shadow: none !important; }
+        .lock-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; opacity: 0.5; z-index: 20; }
+        .card-locked:hover .tcg-card { filter: grayscale(80%) brightness(0.5) blur(1px); }
+        .card-unlocked:hover { transform: translateY(-8px); }
+        
+        /* Rarity Header Colors */
+        .header-iron { color: #aaaaaa; border-color: #aaaaaa; }
+        .header-bronze { color: #cd7f32; border-color: #cd7f32; }
+        .header-diamond { color: #b982ff; border-color: #b982ff; }
+        .header-ascendant { color: #2bc97e; border-color: #2bc97e; }
+        .header-immortal { color: #ff4655; border-color: #ff4655; }
+        .header-radiant { color: #ffea82; border-color: #ffea82; text-shadow: 0 0 10px rgba(255, 234, 130, 0.5); }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo"><span class="nav-logo-text">FRED</span></a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="packs.html">Case</a></li>
+                <li><a href="inventory.html">Collection</a></li>
+                <li><a href="catalog.html" class="nav-active">Index</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>Card Index</h1>
+            <p id="globalCompletion" style="color: #00d4ff; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; margin-top: 10px;">Loading database...</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <div id="seasonTabs" class="season-tabs"></div>
+
+        <div id="catalogContent"></div>
+    </main>
+
+    <script src="js/site.js"></script>
+    <script>
+        let allCards = []; // Store them all globally so we can switch tabs without re-fetching
+
+        // We explicitly define the order we want the rarities to render on the screen!
+        const RARITY_ORDER = ["radiant", "immortal", "ascendant", "diamond", "bronze", "iron"];
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const content = document.getElementById('catalogContent');
+            const globalCompletion = document.getElementById('globalCompletion');
+            
+            try {
+                const res = await fetch(`${getApiBase()}/api/catalog`, { credentials: 'include' });
+                if (!res.ok) throw new Error();
+                
+                allCards = await res.json();
+                
+                if (!allCards || allCards.length === 0) {
+                    content.innerHTML = `<div style="text-align: center; color: white;">No cards exist in the database yet.</div>`;
+                    globalCompletion.innerText = "";
+                    return;
+                }
+
+                // Update total completion
+                const totalUnlocked = allCards.filter(c => c.unlocked).length;
+                globalCompletion.innerText = `Global Completion: ${totalUnlocked} / ${allCards.length} (${Math.round((totalUnlocked/allCards.length)*100)}%)`;
+
+                // 1. Find all unique seasons
+                const seasons = [...new Set(allCards.map(c => c.season))].sort();
+
+                // 2. Build the Tabs
+                const tabsContainer = document.getElementById('seasonTabs');
+                seasons.forEach((season, index) => {
+                    const btn = document.createElement('button');
+                    btn.className = `season-tab ${index === 0 ? 'active' : ''}`;
+                    btn.innerText = season;
+                    btn.onclick = () => {
+                        // Remove active class from all, add to this one
+                        document.querySelectorAll('.season-tab').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                        renderSeason(season);
+                    };
+                    tabsContainer.appendChild(btn);
+                });
+
+                // 3. Render the first season by default
+                if (seasons.length > 0) renderSeason(seasons[0]);
+
+            } catch (err) {
+                content.innerHTML = `<div style="text-align: center; color: #ff4655;">Could not load the catalog.</div>`;
+            }
+        });
+
+        function renderSeason(activeSeason) {
+            const content = document.getElementById('catalogContent');
+            content.innerHTML = ''; // Clear the screen
+
+            // Filter cards to just this season
+            const seasonCards = allCards.filter(c => c.season === activeSeason);
+
+            // Group them by rarity
+            const cardsByRarity = {};
+            RARITY_ORDER.forEach(r => cardsByRarity[r] = []); // Initialize empty arrays in perfect order
+
+            seasonCards.forEach(c => {
+                const r = c.rarity.toLowerCase();
+                if (cardsByRarity[r]) cardsByRarity[r].push(c);
+            });
+
+            // Loop through our ordered rarities and build the HTML sections
+            RARITY_ORDER.forEach(rarity => {
+                const cardsInRarity = cardsByRarity[rarity];
+                if (cardsInRarity.length === 0) return; // Skip if no cards exist in this tier for this season
+
+                const unlockedCount = cardsInRarity.filter(c => c.unlocked).length;
+
+                // Build the header
+                const section = document.createElement('div');
+                section.className = 'rarity-section';
+                
+                section.innerHTML = `
+                    <div class="rarity-header header-${rarity}">
+                        <span>${rarity}</span>
+                        <span class="stats">${unlockedCount} / ${cardsInRarity.length} Unlocked</span>
+                    </div>
+                    <div class="catalog-grid" id="grid-${rarity}"></div>
+                `;
+                
+                content.appendChild(section);
+
+                // Build the grid of cards
+                const grid = document.getElementById(`grid-${rarity}`);
+                
+                cardsInRarity.forEach((card, index) => {
+                    let imgPath = card.image_url;
+                    if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+
+                    const displayId = index + 1; // Visual Pokédex number
+                    const wrapper = document.createElement('div');
+                    
+                    if (card.unlocked) {
+                        wrapper.className = 'catalog-card-wrapper card-unlocked';
+                        wrapper.innerHTML = `
+                            <div class="tcg-card rarity-${card.rarity}" style="width: 180px; height: 252px; font-size: 1.1rem; background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
+                                <span style="position: absolute; top: 10px; left: 10px; color: #fff; font-size: 0.8rem;">#${displayId}</span>
+                            </div>`;
+                    } else {
+                        wrapper.className = 'catalog-card-wrapper card-locked';
+                        wrapper.innerHTML = `
+                            <div class="lock-icon">🔒</div>
+                            <div class="tcg-card rarity-${card.rarity}" style="width: 180px; height: 252px; font-size: 1.1rem; background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
+                                <span style="position: absolute; top: 10px; left: 10px; color: #fff; font-size: 0.8rem;">#${displayId}</span>
+                                <span>???</span>
+                            </div>`;
+                    }
+
+                    grid.appendChild(wrapper);
+                });
+            });
+        }
+    </script>
+</body>
+</html>

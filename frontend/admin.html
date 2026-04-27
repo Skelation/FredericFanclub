@@ -31,6 +31,8 @@
             <option value="radiant">Radiant</option>
         </select>
 
+            <label>Season:</label>
+            <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
         <label>Image URL:</label>
         <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
 
@@ -48,6 +50,14 @@
 
             <button onclick="giveTokens()" style="background: #2bc97e;">Grant Fredtokens</button>
             <p id="tokenStatusMsg"></p>
+            <hr style="border-color: #444; margin: 30px 0;">
+
+        <h2>Manage Cards (Delete)</h2>
+        <button onclick="fetchAdminCards()" style="background: #b489ff;">Load Card Catalog</button>
+        
+        <div id="adminCardList" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
+        
+        <p id="deleteStatusMsg"></p>
     </div>
 
         <script>
@@ -138,6 +148,68 @@
                 msg.innerText = "Error: " + result.error;
             }
         }
+        async function fetchAdminCards() {
+            // Reusing the catalog route to get the master list of cards!
+            const res = await fetch(`${getApiBase()}/api/catalog`);
+            const list = document.getElementById('adminCardList');
+            
+            if (res.ok) {
+                const cards = await res.json();
+                
+                if (!cards || cards.length === 0) {
+                    list.innerHTML = "<p style='color: #888;'>No cards found.</p>";
+                    return;
+                }
+
+                // Build a nice UI list with a red Delete button for each card
+                list.innerHTML = cards.map(c => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; background: #333; padding: 10px; margin-bottom: 5px; border-radius: 4px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <img src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
+                            <div>
+                                <strong style="color: white;">[#${c.id}] ${c.name}</strong> <br>
+                                <span style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">${c.rarity}</span>
+                            </div>
+                        </div>
+                        <button onclick="deleteCard(${c.id})" style="background: #ff4655; color: white; padding: 5px 10px; width: auto; margin: 0; font-size: 0.9rem;">Delete</button>
+                    </div>
+                `).join('');
+            }
+        }
+
+        async function deleteCard(cardId) {
+            // Extra safety check so you don't accidentally click it
+            if (!confirm(`Are you SURE you want to delete Card #${cardId}?\nThis will destroy it and remove it from every player's inventory permanently.`)) return;
+
+            const token = document.getElementById('adminToken').value;
+            const msg = document.getElementById('deleteStatusMsg');
+
+            const res = await fetch(`${getApiBase()}/api/admin/delete-card`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Token': token
+                },
+                body: JSON.stringify({ card_id: cardId })
+            });
+
+            const result = await res.json();
+            
+            if (res.ok) {
+                msg.style.color = "lime";
+                msg.innerText = result.message;
+                fetchAdminCards(); // Refresh the list so the deleted card disappears
+            } else {
+                msg.style.color = "red";
+                msg.innerText = "Error: " + result.error;
+            }
+        }
+        const data = {
+                    name: document.getElementById('cardName').value,
+                    rarity: document.getElementById('cardRarity').value,
+                    image_url: document.getElementById('cardImage').value,
+                    season: document.getElementById('cardSeason').value // NEW
+                };
     </script>
     </body>
 </html>

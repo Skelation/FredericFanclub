@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trade-Up Contract - FRED</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        /* --- CONTRACT UI STYLES --- */
+        .contract-slots {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin: 40px 0;
+            flex-wrap: wrap;
+        }
+
+        .contract-slot {
+            width: 120px;
+            height: 168px;
+            border: 2px dashed rgba(255,255,255,0.2);
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Orbitron';
+            font-size: 2rem;
+            color: rgba(255,255,255,0.1);
+            background: rgba(0,0,0,0.3);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .contract-slot:hover { border-color: rgba(255,255,255,0.5); }
+        .contract-slot.filled { border: none; background: transparent; }
+
+        .inventory-mini-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            padding: 20px 0;
+            background: rgba(0,0,0,0.5);
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+
+        /* Tiny cards for the inventory selector */
+        .mini-card-wrapper {
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+        .mini-card-wrapper:hover { transform: translateY(-5px); }
+        
+        .mini-card-wrapper.disabled {
+            filter: grayscale(100%) opacity(0.3);
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .mini-qty {
+            position: absolute;
+            top: -8px; right: -8px;
+            background: #ff4655; color: white;
+            font-family: 'Orbitron'; font-size: 0.8rem; font-weight: bold;
+            padding: 3px 8px; border-radius: 12px; z-index: 10;
+        }
+
+        /* The Sign Button */
+        .sign-btn {
+            display: block; margin: 0 auto;
+            background: #2bc97e; color: #000;
+            font-family: 'Orbitron'; font-weight: 900; font-size: 1.5rem;
+            padding: 15px 40px; border: none; border-radius: 4px;
+            cursor: pointer; transition: all 0.3s;
+            text-transform: uppercase;
+        }
+        .sign-btn:disabled {
+            background: #333; color: #666; cursor: not-allowed;
+        }
+        .sign-btn:not(:disabled):hover {
+            box-shadow: 0 0 30px rgba(43, 201, 126, 0.6); transform: scale(1.05);
+        }
+
+        /* The Reveal Animation Modal */
+        .reveal-modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.95); z-index: 9999;
+            display: none; justify-content: center; align-items: center; flex-direction: column;
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo"><span class="nav-logo-text">FRED</span></a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="packs.html">Case</a></li>
+                <li><a href="inventory.html">Collection</a></li>
+                <li><a href="tradeup.html" class="nav-active">Trade-Up</a></li>
+            </ul>
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>Trade-Up Contract</h1>
+            <p style="color: #00d4ff; font-family: 'Rajdhani'; font-size: 1.2rem;">Exchange 5 cards of identical rarity for 1 upgraded card.</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <div class="contract-slots" id="contractSlots">
+            <div class="contract-slot" onclick="removeSlot(0)">1</div>
+            <div class="contract-slot" onclick="removeSlot(1)">2</div>
+            <div class="contract-slot" onclick="removeSlot(2)">3</div>
+            <div class="contract-slot" onclick="removeSlot(3)">4</div>
+            <div class="contract-slot" onclick="removeSlot(4)">5</div>
+        </div>
+
+        <button id="btnSignContract" class="sign-btn" disabled onclick="executeTradeUp()">Sign Contract</button>
+        <div id="contractMsg" style="text-align: center; margin-top: 15px; color: #ff4655; font-family: 'Rajdhani'; font-size: 1.2rem;"></div>
+
+        <h3 style="margin-top: 40px; font-family: 'Orbitron';">Your Vault</h3>
+        <div id="inventoryMiniGrid" class="inventory-mini-grid">
+            Loading...
+        </div>
+    </main>
+
+    <div id="revealModal" class="reveal-modal">
+        <h2 style="color: white; font-family: 'Orbitron'; font-size: 2rem; margin-bottom: 30px;">CONTRACT COMPLETE</h2>
+        <div id="revealCardDisplay"></div>
+        <button class="fred-btn" style="margin-top: 40px;" onclick="closeReveal()">Close</button>
+    </div>
+
+    <script src="js/site.js"></script>
+    <script>
+        let rawInventory = []; 
+        let slottedCards = []; // Holds up to 5 card objects
+
+        async function initTradeUp() {
+            try {
+                const res = await fetch(`${getApiBase()}/api/inventory`, { credentials: 'include' });
+                if (!res.ok) throw new Error();
+                const cards = await res.json();
+                
+                // Filter out Radiants (can't trade up) and empty cards
+                rawInventory = cards.filter(c => c.quantity > 0 && c.rarity !== 'radiant');
+                renderMiniGrid();
+            } catch (err) {
+                document.getElementById('inventoryMiniGrid').innerHTML = "<span style='color: #ff4655;'>Log in to view inventory.</span>";
+            }
+        }
+
+        function getActiveRarity() {
+            return slottedCards.length > 0 ? slottedCards[0].rarity : null;
+        }
+
+        function slotCard(cardId) {
+            if (slottedCards.length >= 5) return;
+
+            // Find it in inventory
+            const invIndex = rawInventory.findIndex(c => c.id === cardId);
+            if (invIndex === -1 || rawInventory[invIndex].quantity <= 0) return;
+
+            const card = rawInventory[invIndex];
+
+            // Enforce same rarity
+            const activeRarity = getActiveRarity();
+            if (activeRarity && card.rarity !== activeRarity) return;
+
+            // Move 1 from inventory to slots
+            rawInventory[invIndex].quantity--;
+            slottedCards.push({ ...card }); // clone it
+            
+            updateUI();
+        }
+
+        function removeSlot(slotIndex) {
+            if (slotIndex >= slottedCards.length) return;
+
+            const card = slottedCards[slotIndex];
+            
+            // Give it back to inventory
+            const invIndex = rawInventory.findIndex(c => c.id === card.id);
+            if (invIndex !== -1) rawInventory[invIndex].quantity++;
+
+            // Remove from slots array
+            slottedCards.splice(slotIndex, 1);
+            
+            updateUI();
+        }
+
+        function updateUI() {
+            const activeRarity = getActiveRarity();
+
+            // 1. Update the top slots
+            const slotsDiv = document.getElementById('contractSlots');
+            slotsDiv.innerHTML = '';
+            for (let i = 0; i < 5; i++) {
+                if (i < slottedCards.length) {
+                    const c = slottedCards[i];
+                    let imgPath = c.image_url;
+                    if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+
+                    slotsDiv.innerHTML += `
+                        <div class="contract-slot filled" onclick="removeSlot(${i})">
+                            <div class="tcg-card rarity-${c.rarity}" style="width: 100%; height: 100%; font-size: 0.8rem; background-image: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0)), url('${imgPath}');">
+                            </div>
+                        </div>`;
+                } else {
+                    slotsDiv.innerHTML += `<div class="contract-slot" onclick="removeSlot(${i})">${i+1}</div>`;
+                }
+            }
+
+            // 2. Enable/Disable the Sign Button
+            document.getElementById('btnSignContract').disabled = (slottedCards.length !== 5);
+
+            // 3. Render the bottom grid (with smart disabling)
+            renderMiniGrid(activeRarity);
+        }
+
+        function renderMiniGrid(lockedRarity = null) {
+            const grid = document.getElementById('inventoryMiniGrid');
+            grid.innerHTML = '';
+
+            if (rawInventory.length === 0) {
+                grid.innerHTML = "<span style='color: #888;'>No eligible cards to trade up.</span>";
+                return;
+            }
+
+            rawInventory.forEach(c => {
+                if (c.quantity <= 0) return;
+
+                // Disable if we have an active rarity and this doesn't match
+                const isDisabled = (lockedRarity && c.rarity !== lockedRarity) ? 'disabled' : '';
+
+                let imgPath = c.image_url;
+                if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+
+                grid.innerHTML += `
+                    <div class="mini-card-wrapper ${isDisabled}" onclick="slotCard(${c.id})">
+                        <div class="mini-qty">x${c.quantity}</div>
+                        <div class="tcg-card rarity-${c.rarity}" style="width: 120px; height: 168px; font-size: 0.8rem; background-image: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0)), url('${imgPath}');">
+                            <span>${c.name}</span>
+                        </div>
+                    </div>`;
+            });
+        }
+
+        async function executeTradeUp() {
+            if (slottedCards.length !== 5) return;
+
+            const btn = document.getElementById('btnSignContract');
+            const msg = document.getElementById('contractMsg');
+            btn.disabled = true;
+            btn.innerText = "FORGING...";
+            msg.innerText = "";
+
+            const payload = { card_ids: slottedCards.map(c => c.id) };
+
+            try {
+                const res = await fetch(`${getApiBase()}/api/economy/trade-up`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (res.ok) {
+                    // Success! Show the reveal modal
+                    slottedCards = []; // clear the slots
+                    initTradeUp(); // refresh inventory from server behind the scenes
+                    
+                    let imgPath = data.card.image_url;
+                    if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+
+                    document.getElementById('revealCardDisplay').innerHTML = `
+                        <div class="tcg-card rarity-${data.card.rarity}" style="width: 240px; height: 336px; font-size: 1.5rem; box-shadow: 0 0 50px rgba(255,255,255,0.5); background-image: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0) 40%), url('${imgPath}');">
+                            <span>${data.card.name}</span>
+                        </div>
+                    `;
+                    document.getElementById('revealModal').style.display = "flex";
+                } else {
+                    msg.innerText = data.error;
+                }
+            } catch (e) {
+                msg.innerText = "Network Error.";
+            } finally {
+                btn.innerText = "Sign Contract";
+                updateUI(); // re-evaluates button state
+            }
+        }
+
+        function closeReveal() {
+            document.getElementById('revealModal').style.display = "none";
+        }
+
+        document.addEventListener('DOMContentLoaded', initTradeUp);
+    </script>
+</body>
+</html>
