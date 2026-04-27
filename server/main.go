@@ -466,6 +466,51 @@ func main() {
 		fmt.Fprintf(w, `{"success": true, "message": "Card added!", "card_id": %d}`, newID)
 	})
 
+	// ADMIN: Give Fredtokens to a specific user
+	mux.HandleFunc("OPTIONS /api/admin/tokens", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/tokens", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		
+		// Security Check: Only the Admin can mint tokens!
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			DiscordID string `json:"discord_id"`
+			Amount    int    `json:"amount"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Inject the tokens into the user's balance
+		// Note: Ensure your column is actually named 'balance' or 'tokens' based on your DB schema!
+		result, err := DB.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", req.Amount, req.DiscordID)
+		if err != nil {
+			log.Println("Maybe Balance should be changed to fredtokens")
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Check if the user actually exists
+		rowsAffected, _ := result.RowsAffected()
+		if rowsAffected == 0 {
+			http.Error(w, `{"error": "User not found"}`, http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Successfully minted %d FT for user %s"}`, req.Amount, req.DiscordID)
+	})
+
 	// ADMIN: Preview a randomly generated prop bet for a specific player
 	mux.HandleFunc("OPTIONS /api/admin/preview-prop", func(w http.ResponseWriter, r *http.Request) {
 		applyCORS(w, r, allowed)

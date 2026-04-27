@@ -1246,21 +1246,45 @@ window.cancelEntireMarket = async function() {
 document.addEventListener('DOMContentLoaded', () => {
     const btnOpenCase = document.getElementById('btnOpenCase');
     if (!btnOpenCase) return; // Only run if we are on the packs page
-
+    
     const track = document.getElementById('spinnerTrack');
     const winnerReveal = document.getElementById('winnerReveal');
     const winnerCardDisplay = document.getElementById('winnerCardDisplay');
-    
-    // Some fake data to test the UI before we connect it to the Go Backend
-    const dummyCards = [
-        { name: "Graussbyt Base", rarity: "blue" },
-        { name: "Vincent Base", rarity: "blue" },
-        { name: "Heri Main", rarity: "purple" },
-        { name: "XTrix Clutch", rarity: "pink" },
-        { name: "Fred Mascot", rarity: "red" }
-    ];
 
-    btnOpenCase.addEventListener('click', async () => {
+    // --- NEW: PRE-FILL THE SPINNER ON LOAD ---
+    function initSpinnerPreview() {
+        if (!track) return;
+        track.innerHTML = ""; 
+        const fillerRarities = [
+            "iron", "iron", "iron", "iron", "bronze", "bronze", 
+            "diamond", "ascendant", "immortal", "radiant"
+        ]; 
+
+        // Generate 10 static cards to fill the window
+        for (let i = 0; i < 10; i++) {
+            const cardEl = document.createElement('div');
+            const cardRarity = fillerRarities[Math.floor(Math.random() * fillerRarities.length)];
+            
+            cardEl.className = `tcg-card rarity-${cardRarity}`;
+            cardEl.style.backgroundImage = `linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)`;
+            cardEl.style.justifyContent = "center"; 
+            cardEl.innerHTML = `
+                <span style="font-size: 4rem; opacity: 0.1; font-family: sans-serif;">?</span>
+                <span style="position: absolute; bottom: 10px; font-size: 0.8rem; color: rgba(255,255,255,0.5); text-transform: uppercase;">${cardRarity}</span>
+            `;
+            track.appendChild(cardEl);
+        }
+        
+        // Offset it slightly so it doesn't look perfectly rigid
+        track.style.transform = `translateX(-20px)`;
+    }
+
+    // Call it immediately when the page loads!
+    initSpinnerPreview();
+    
+    // -----------------------------------------
+
+        btnOpenCase.addEventListener('click', async () => {
         btnOpenCase.disabled = true;
         btnOpenCase.innerText = "Opening...";
         winnerReveal.style.display = "none";
@@ -1291,30 +1315,45 @@ document.addEventListener('DOMContentLoaded', () => {
             const winningCardData = data.card;
             const winningIndex = 45; 
 
-            // Just a visual filler array for the spinner effect
-            const fillerRarities = ["blue", "blue", "blue", "purple", "blue"]; 
+            // Create a weighted array of our new Valorant Ranks for the filler cards
+            const fillerRarities = [
+                "iron", "iron", "iron", "iron", "iron", 
+                "bronze", "bronze", "bronze", 
+                "diamond", "diamond", 
+                "ascendant", 
+                "immortal", 
+                "radiant"
+            ]; 
 
-            // 3. Generate the 60 visual cards
+            // 3. Generate the 60 Mystery Cards
             for (let i = 0; i < 60; i++) {
                 const cardEl = document.createElement('div');
+                let cardRarity = "";
                 
                 if (i === winningIndex) {
-                    // Inject the REAL winner at the finish line
-                    cardEl.className = `tcg-card rarity-${winningCardData.rarity}`;
-                    cardEl.innerHTML = `<span>${winningCardData.name}</span>`;
+                    // The winner gets its true rarity, but its identity is HIDDEN!
+                    cardRarity = winningCardData.rarity;
+                    cardEl.id = "spinningWinningCard"; // We need this ID to find it when it stops
                 } else {
-                    // Inject random visual filler
-                    const randomFill = fillerRarities[Math.floor(Math.random() * fillerRarities.length)];
-                    cardEl.className = `tcg-card rarity-${randomFill}`;
-                    cardEl.innerHTML = `<span>???</span>`;
+                    // Random filler rarity
+                    cardRarity = fillerRarities[Math.floor(Math.random() * fillerRarities.length)];
                 }
+                
+                // Style it as a Mystery Box
+                cardEl.className = `tcg-card rarity-${cardRarity}`;
+                cardEl.style.backgroundImage = `linear-gradient(135deg, #1a1a1a 0%, #0a0a0a 100%)`;
+                cardEl.style.justifyContent = "center"; // Center the question mark
+                cardEl.innerHTML = `
+                    <span style="font-size: 4rem; opacity: 0.1; font-family: sans-serif;">?</span>
+                    <span style="position: absolute; bottom: 10px; font-size: 0.8rem; color: rgba(255,255,255,0.5); text-transform: uppercase;">${cardRarity}</span>
+                `;
                 
                 track.appendChild(cardEl);
             }
 
             track.getBoundingClientRect(); // Force render
 
-            // 4. Calculate where to stop (Same math as before)
+            // 4. Calculate where to stop
             const totalCardWidth = 160 + 20; 
             const offsetToWinner = (winningIndex * totalCardWidth);
             const centerAdjustment = (track.parentElement.offsetWidth / 2) - (totalCardWidth / 2);
@@ -1327,15 +1366,41 @@ document.addEventListener('DOMContentLoaded', () => {
                 track.style.transform = `translateX(-${finalTransform}px)`;
             }, 50);
 
-            // 6. Reveal the winner
+            // 6. THE DRAMATIC REVEAL (Runs when the spinner stops)
             setTimeout(() => {
-                winnerCardDisplay.innerHTML = `<div class="tcg-card rarity-${winningCardData.rarity}" style="margin: 0 auto; width: 200px; height: 280px; font-size: 1.2rem;"><span>${winningCardData.name}</span></div>`;
+                let imgPath = winningCardData.image_url;
+                if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) {
+                    imgPath = '/' + imgPath; 
+                }
+
+                // A. Reveal the card *inside* the spinner track
+                const spinningWinner = document.getElementById('spinningWinningCard');
+                if (spinningWinner) {
+                    spinningWinner.style.justifyContent = "flex-end"; // Move text back to bottom
+                    spinningWinner.style.backgroundImage = `linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}')`;
+                    spinningWinner.innerHTML = ``;
+                    
+                    // Add a little flash effect to make it pop!
+                    spinningWinner.style.boxShadow = "0 0 40px rgba(255,255,255,0.8)";
+                    setTimeout(() => { spinningWinner.style.boxShadow = ""; }, 500);
+                }
+
+                // B. Show the big winner display below
+                winnerCardDisplay.innerHTML = `
+                    <div class="tcg-card rarity-${winningCardData.rarity}" 
+                         style="margin: 0 auto; width: 240px; height: 336px; font-size: 1.5rem; 
+                                background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
+                    </div>`;
+                
                 winnerReveal.style.display = "block";
                 
+                // C. Reset the button
                 btnOpenCase.disabled = false;
                 btnOpenCase.innerText = "Open Case (500 FT)";
                 
-                // Optional: Trigger a function here to update the user's token balance in the UI!
+                if (typeof window.loadUserProfile === 'function') {
+                    window.loadUserProfile();
+                }
                 
             }, 6000); 
 

@@ -36,6 +36,18 @@
 
         <button onclick="addCard()">Add to Database</button>
         <p id="statusMsg"></p>
+            <hr style="border-color: #444; margin: 30px 0;">
+
+            <h2>Central Bank (Mint Tokens)</h2>
+
+            <label>User Discord ID:</label>
+            <input type="text" id="targetDiscordId" placeholder="e.g. 123456789012345678">
+
+            <label>Amount to Give (Can be negative to remove!):</label>
+            <input type="number" id="tokenAmount" placeholder="5000">
+
+            <button onclick="giveTokens()" style="background: #2bc97e;">Grant Fredtokens</button>
+            <p id="tokenStatusMsg"></p>
     </div>
 
         <script>
@@ -94,6 +106,36 @@
                 msg.innerText = "Fetch Error: " + error.message;
             } finally {
                 btn.innerText = "Add to Database";
+            }
+        }
+
+        async function giveTokens() {
+            const token = document.getElementById('adminToken').value;
+            const data = {
+                discord_id: document.getElementById('targetDiscordId').value,
+                amount: parseInt(document.getElementById('tokenAmount').value)
+            };
+
+            const response = await fetch(`${getApiBase()}/api/admin/tokens`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Admin-Token': token
+                },
+                body: JSON.stringify(data)
+            });
+
+            const result = await response.json();
+            const msg = document.getElementById('tokenStatusMsg');
+            
+            if (response.ok) {
+                msg.style.color = "lime";
+                msg.innerText = result.message;
+                document.getElementById('targetDiscordId').value = ''; 
+                document.getElementById('tokenAmount').value = '';
+            } else {
+                msg.style.color = "red";
+                msg.innerText = "Error: " + result.error;
             }
         }
     </script>
