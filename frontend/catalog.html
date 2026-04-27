@@ -32,9 +32,9 @@
         .catalog-card-wrapper { position: relative; display: flex; justify-content: center; transition: transform 0.3s ease; }
 
         /* Locked CSS */
-        .card-locked .tcg-card { filter: grayscale(100%) brightness(0.25) blur(4px); transition: all 0.4s ease; border-color: #333 !important; box-shadow: none !important; }
+        .card-locked .tcg-card { filter: grayscale(100%) brightness(0.25) blur(5px); transition: all 0.4s ease; border-color: #333 !important; box-shadow: none !important; }
         .lock-icon { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 4rem; opacity: 0.5; z-index: 20; }
-        .card-locked:hover .tcg-card { filter: grayscale(80%) brightness(0.5) blur(1px); }
+        .card-locked:hover .tcg-card { filter: grayscale(80%) brightness(0.5) blur(4px); }
         .card-unlocked:hover { transform: translateY(-8px); }
         
         /* Rarity Header Colors */
@@ -47,17 +47,30 @@
     </style>
 </head>
 <body>
-    <div class="bg-waves" aria-hidden="true"></div>
-
-    <nav>
+    
+<div class="bg-waves" aria-hidden="true"></div>
+        <nav>
         <div class="container">
-            <a href="index.html" class="nav-logo"><span class="nav-logo-text">FRED</span></a>
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            
             <ul class="nav-links">
                 <li><a href="index.html">Home</a></li>
-                <li><a href="packs.html">Case</a></li>
-                <li><a href="inventory.html">Collection</a></li>
-                <li><a href="catalog.html" class="nav-active">Index</a></li>
+                <li><a href="matches.html">Matchs</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html">Betting</a></li> 
+                <li><a href="packs.html">Packs</a></li>
+                <li><a href="inventory.html">Inventaire</a></li>
+                <li><a href="catalog.html" class="nav-active">Catalogue</a></li>
+                <li><a href="leaderboard.html">Classement</a></li>
             </ul>
+
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                    <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
+            </div>
+
         </div>
     </nav>
 

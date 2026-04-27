@@ -1412,3 +1412,215 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+
+window.claimDailyReward = async function() {
+    const btn = document.getElementById('btnDailyReward');
+    const msg = document.getElementById('dailyMessage');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.innerText = "CLAIMING...";
+    msg.innerText = "";
+
+    try {
+        const res = await fetch(`${getApiBase()}/api/economy/daily`, {
+            method: 'POST',
+            credentials: 'include'
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            msg.style.color = "#00ff64";
+            msg.innerText = data.message;
+            btn.innerText = "CLAIMED!";
+            btn.style.background = "#333";
+            btn.style.boxShadow = "none";
+            btn.style.color = "#666";
+            
+            // Instantly update the user's wallet in the top right corner!
+            if (typeof window.loadUserProfile === 'function') {
+                window.loadUserProfile();
+            }
+        } else {
+            msg.style.color = "#ffaa00"; // Orange color for the cooldown timer
+            msg.innerText = data.error;
+            btn.disabled = false;
+            btn.innerText = "CLAIM 250 FT";
+        }
+    } catch (err) {
+        msg.style.color = "#ff4655";
+        msg.innerText = "Network Error.";
+        btn.disabled = false;
+        btn.innerText = "CLAIM 250 FT";
+    }
+};
+
+window.checkDailyRewardStatus = async function() {
+    const btn = document.getElementById('btnDailyReward');
+    const msg = document.getElementById('dailyMessage');
+    if (!btn) return; // Only run if we are on the packs page
+
+    try {
+        const res = await fetch(`${getApiBase()}/api/economy/daily`, {
+            method: 'GET',
+            credentials: 'include'
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            
+            if (!data.available) {
+                // Instantly lock and grey out the button!
+                btn.disabled = true;
+                btn.innerText = "ON COOLDOWN";
+                btn.style.background = "#333";
+                btn.style.color = "#666";
+                btn.style.boxShadow = "none";
+                msg.style.color = "#ffaa00";
+                msg.innerText = `Come back in ${data.hours}h ${data.minutes}m!`;
+            }
+        }
+    } catch (err) {
+        console.error("Failed to check daily status.");
+    }
+};
+
+// Listen for the page to load, then run the check!
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('btnDailyReward')) {
+        checkDailyRewardStatus();
+    }
+});
+
+// --- DAILY MISSIONS INJECTOR ---
+async function loadDailyMissions() {
+    const list = document.getElementById('missionsList');
+    if (!list) return; // Only run if we are on a page that has the missions box!
+
+    try {
+        const res = await fetch(`${getApiBase()}/api/quests`, { credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        
+        list.innerHTML = ""; // Clear loading text
+
+        data.quests.forEach(qData => {
+            const q = qData.quest;
+            const claimed = qData.claimed;
+            
+            // Color coding based on difficulty
+            let accentColor = "#2bc97e"; // Easy (Green)
+            if (q.difficulty === "medium") accentColor = "#ffaa00"; // Yellow
+            if (q.difficulty === "hard") accentColor = "#ff4655"; // Red
+
+            const btnHtml = claimed 
+                ? `<button disabled style="background: #333; color: #666; border: none; padding: 8px 15px; border-radius: 4px; font-family: 'Orbitron'; font-weight: bold; cursor: not-allowed;">COMPLETED</button>`
+                : `<button onclick="verifyQuest('${q.difficulty}')" style="background: ${accentColor}; color: #000; border: none; padding: 8px 15px; border-radius: 4px; font-family: 'Orbitron'; font-weight: bold; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'">VERIFY MATCHES</button>`;
+
+            list.innerHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.03); padding: 15px; border-radius: 6px; border-left: 4px solid ${accentColor};">
+                    <div>
+                        <div style="font-family: 'Orbitron'; color: white; font-size: 1.2rem; font-weight: bold;">${q.title}</div>
+                        <div style="font-family: 'Rajdhani'; color: #aaa; font-size: 1.1rem; margin-top: 4px;">${q.description}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-family: 'Orbitron'; color: #00d4ff; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px;">+${q.reward} FT</div>
+                        ${btnHtml}
+                    </div>
+                </div>
+            `;
+        });
+
+    } catch (err) {
+        list.innerHTML = `<p style="text-align: center; color: #ff4655; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;">Please log in to view and track your daily missions.</p>`;
+    }
+
+    // Start the Reset Timer
+    setInterval(() => {
+        const timerText = document.getElementById('resetTimer');
+        if (!timerText) return;
+
+        const now = new Date();
+        let nextReset = new Date();
+        nextReset.setUTCHours(2, 0, 0, 0); // 2:00 AM UTC
+        if (now.getTime() > nextReset.getTime()) {
+            nextReset.setUTCDate(nextReset.getUTCDate() + 1);
+        }
+        
+        const diff = nextReset - now;
+        const h = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        
+        timerText.innerText = `Resets in: ${h}h ${m}m`;
+    }, 1000);
+}
+
+// The placeholder verification function
+window.verifyQuest = async function(difficulty) {
+    const apiBase = getApiBase();
+    
+    // Find the specific button that was clicked so we can animate it
+    const list = document.getElementById('missionsList');
+    const buttons = list.querySelectorAll('button');
+    let targetBtn = null;
+    
+    // Simple way to find the button we just clicked based on difficulty color/text
+    buttons.forEach(btn => {
+        if (btn.getAttribute('onclick') && btn.getAttribute('onclick').includes(difficulty)) {
+            targetBtn = btn;
+        }
+    });
+
+    if (targetBtn) {
+        targetBtn.disabled = true;
+        targetBtn.innerText = "SCANNING RIOT API...";
+        targetBtn.style.background = "#fff";
+        targetBtn.style.color = "#000";
+    }
+
+    try {
+        const res = await fetch(`${apiBase}/api/quests/verify`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ difficulty: difficulty })
+        });
+
+        const data = await res.json();
+
+        if (res.ok) {
+            // SUCCESS! 
+            alert(data.message);
+            
+            // Reload the missions UI to show it as "COMPLETED"
+            loadDailyMissions();
+            
+            // Instantly update the user's wallet in the top right
+            if (typeof window.loadUserProfile === 'function') {
+                window.loadUserProfile();
+            }
+        } else {
+            // FAILED (or not done yet)
+            alert("Status: " + data.error);
+            if (targetBtn) {
+                targetBtn.disabled = false;
+                targetBtn.innerText = "VERIFY MATCHES";
+                
+                // Reset colors based on difficulty
+                if (difficulty === 'easy') targetBtn.style.background = "#2bc97e";
+                if (difficulty === 'medium') targetBtn.style.background = "#ffaa00";
+                if (difficulty === 'hard') targetBtn.style.background = "#ff4655";
+            }
+        }
+    } catch (err) {
+        alert("Network error while scanning matches.");
+        if (targetBtn) {
+            targetBtn.disabled = false;
+            targetBtn.innerText = "VERIFY MATCHES";
+        }
+    }
+};
+
+// Run it when the page loads!
+document.addEventListener('DOMContentLoaded', loadDailyMissions);

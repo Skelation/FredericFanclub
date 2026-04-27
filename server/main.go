@@ -261,6 +261,382 @@ func main() {
 		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, cardName, cardRarity, cardImage)
 	})
 
+	// POST: Claim Daily Reward (250 FT every 24 hours)
+	mux.HandleFunc("OPTIONS /api/economy/daily", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	// GET: Check if the Daily Reward is available right now
+	mux.HandleFunc("GET /api/economy/daily", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var lastClaimStr sql.NullString
+		err := DB.QueryRow("SELECT last_daily_claim FROM users WHERE discord_id = ?", userID).Scan(&lastClaimStr)
+		if err != nil {
+			http.Error(w, `{"error": "user not found"}`, http.StatusInternalServerError)
+			return
+		}
+
+		var lastClaim time.Time
+		if lastClaimStr.Valid && lastClaimStr.String != "" {
+			lastClaim, _ = time.Parse(time.RFC3339, lastClaimStr.String)
+		}
+
+		now := time.Now().UTC()
+		cooldown := 24 * time.Hour
+		timeSinceLastClaim := now.Sub(lastClaim)
+
+		w.Header().Set("Content-Type", "application/json")
+		
+		// If they are on cooldown, send back the remaining time
+		if timeSinceLastClaim < cooldown {
+			timeLeft := cooldown - timeSinceLastClaim
+			hours := int(timeLeft.Hours())
+			minutes := int(timeLeft.Minutes()) % 60
+			fmt.Fprintf(w, `{"available": false, "hours": %d, "minutes": %d}`, hours, minutes)
+			return
+		}
+
+		// Otherwise, it's ready!
+		fmt.Fprintf(w, `{"available": true}`)
+	})
+
+	mux.HandleFunc("POST /api/economy/daily", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// 1. Get the exact time they last claimed it
+		var lastClaimStr sql.NullString
+		err := DB.QueryRow("SELECT last_daily_claim FROM users WHERE discord_id = ?", userID).Scan(&lastClaimStr)
+		if err != nil {
+			http.Error(w, `{"error": "user not found"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// 2. The Time-Lock Math
+		var lastClaim time.Time
+		if lastClaimStr.Valid && lastClaimStr.String != "" {
+			lastClaim, _ = time.Parse(time.RFC3339, lastClaimStr.String)
+		} else {
+			lastClaim = time.Time{} // If it's empty, they've never claimed it!
+		}
+
+		now := time.Now().UTC()
+		cooldown := 24 * time.Hour
+		timeSinceLastClaim := now.Sub(lastClaim)
+
+		w.Header().Set("Content-Type", "application/json")
+
+		// 3. If they are too early, reject them with the remaining time
+		if timeSinceLastClaim < cooldown {
+			timeLeft := cooldown - timeSinceLastClaim
+			hours := int(timeLeft.Hours())
+			minutes := int(timeLeft.Minutes()) % 60
+			
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"error": "Come back in %d hours and %d minutes!"}`, hours, minutes)
+			return
+		}
+
+		// 4. Grant 250 FT and stamp the new time!
+		tx, _ := DB.Begin()
+		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens + 250, last_daily_claim = ? WHERE discord_id = ?", now.Format(time.RFC3339), userID)
+		if err != nil {
+			tx.Rollback()
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		tx.Commit()
+
+		fmt.Fprintf(w, `{"success": true, "message": "Daily Drop Claimed! +250 FT"}`)
+	})
+
+	// --- QUEST DEFINITIONS ---
+	type Quest struct {
+		ID          string `json:"id"`
+		Title       string `json:"title"`
+		Description string `json:"description"`
+		Reward      int    `json:"reward"`
+		Difficulty  string `json:"difficulty"`
+	}
+
+	easyQuests := []Quest{
+		{ID: "e1", Title: "Warmup Routine", Description: "Play 2 Competitive matches.", Reward: 150, Difficulty: "easy"},
+		{ID: "e2", Title: "Supporting Cast", Description: "Get 15 total Assists across all games.", Reward: 150, Difficulty: "easy"},
+		{ID: "e3", Title: "Chip Damage", Description: "Deal 2,500 total damage to enemies.", Reward: 150, Difficulty: "easy"},
+		{ID: "e4", Title: "Consistent", Description: "Achieve an Average Combat Score of 150+ in one match.", Reward: 150, Difficulty: "easy"},
+	}
+	medQuests := []Quest{
+		{ID: "m1", Title: "Clicking Heads", Description: "Accumulate 20 total Headshots.", Reward: 250, Difficulty: "medium"},
+		{ID: "m2", Title: "Lethal Force", Description: "Get 15+ Kills in a single match.", Reward: 250, Difficulty: "medium"},
+		{ID: "m3", Title: "Securing the Bag", Description: "Win 15 rounds total.", Reward: 250, Difficulty: "medium"},
+		{ID: "m4", Title: "Positive Impact", Description: "Finish a match with a K/D Ratio above 1.0.", Reward: 250, Difficulty: "medium"},
+	}
+	hardQuests := []Quest{
+		{ID: "h1", Title: "Hard Carry", Description: "Get 25+ Kills in a single match.", Reward: 500, Difficulty: "hard"},
+		{ID: "h2", Title: "Flawless Victory", Description: "Win a match by a margin of 5 or more rounds.", Reward: 500, Difficulty: "hard"},
+		{ID: "h3", Title: "Combat Medic", Description: "Get 10 Assists and survive 10 rounds in one match.", Reward: 500, Difficulty: "hard"},
+		{ID: "h4", Title: "Top Fragger", Description: "Accumulate 50 total kills today.", Reward: 500, Difficulty: "hard"},
+	}
+
+	// GET: Fetch Today's Global Quests & User Progress
+	mux.HandleFunc("OPTIONS /api/quests", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/quests", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+
+		// 1. THE 2:00 AM RESET LOGIC
+		// We take the current UTC time, subtract 2 hours, and format it as a Date.
+		// If it is 1:59 AM, subtracting 2 hours makes it yesterday.
+		// If it is 2:00 AM, it rolls over to today!
+		now := time.Now().UTC()
+		effectiveDate := now.Add(-2 * time.Hour).Format("2006-01-02")
+
+		// 2. DETERMINISTIC GENERATION (Everyone gets the same quests)
+		// We convert the date string (e.g. "2026-04-27") into a mathematical seed
+		seedInt := int64(0)
+		for _, char := range effectiveDate { seedInt += int64(char) }
+		
+		dailyRand := rand.New(rand.NewSource(seedInt))
+		
+		todaysEasy := easyQuests[dailyRand.Intn(len(easyQuests))]
+		todaysMed := medQuests[dailyRand.Intn(len(medQuests))]
+		todaysHard := hardQuests[dailyRand.Intn(len(hardQuests))]
+
+		// 3. CHECK USER'S CLAIM STATUS
+		easyClaimed, medClaimed, hardClaimed := false, false, false
+		if userID != "" {
+			// Insert a blank row for them today if they don't have one
+			DB.Exec("INSERT OR IGNORE INTO user_quests (discord_id, quest_date) VALUES (?, ?)", userID, effectiveDate)
+			
+			DB.QueryRow("SELECT easy_claimed, med_claimed, hard_claimed FROM user_quests WHERE discord_id = ? AND quest_date = ?", userID, effectiveDate).Scan(&easyClaimed, &medClaimed, &hardClaimed)
+		}
+
+		// 4. SEND RESPONSE
+		response := map[string]interface{}{
+			"date": effectiveDate,
+			"quests": []map[string]interface{}{
+				{"quest": todaysEasy, "claimed": easyClaimed},
+				{"quest": todaysMed, "claimed": medClaimed},
+				{"quest": todaysHard, "claimed": hardClaimed},
+			},
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
+	// POST: Verify Matches and Claim Mission Rewards
+	mux.HandleFunc("OPTIONS /api/quests/verify", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/quests/verify", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct { Difficulty string `json:"difficulty"` }
+		json.NewDecoder(r.Body).Decode(&req)
+
+		// 1. Get the user's Linked Riot Account
+		var linkedPlayer string
+		err := DB.QueryRow("SELECT linked_player FROM users WHERE discord_id = ?", userID).Scan(&linkedPlayer)
+		if err != nil || linkedPlayer == "none" || linkedPlayer == "" {
+			http.Error(w, `{"error": "Your Discord is not linked to a Riot account. Ask an Admin!"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 2. Determine today's date and the EXACT 2:00 AM UTC cutoff timestamp
+		now := time.Now().UTC()
+		effectiveDate := now.Add(-2 * time.Hour).Format("2006-01-02")
+		resetTime, _ := time.Parse("2006-01-02", effectiveDate)
+		resetTime = resetTime.Add(2 * time.Hour)
+
+		// 3. Check if they already claimed this difficulty today
+		var claimed bool
+		claimColumn := ""
+		if req.Difficulty == "easy" { claimColumn = "easy_claimed" }
+		if req.Difficulty == "medium" { claimColumn = "med_claimed" }
+		if req.Difficulty == "hard" { claimColumn = "hard_claimed" }
+		
+		if claimColumn == "" {
+			http.Error(w, `{"error": "Invalid difficulty"}`, http.StatusBadRequest)
+			return
+		}
+
+		DB.QueryRow(fmt.Sprintf("SELECT %s FROM user_quests WHERE discord_id = ? AND quest_date = ?", claimColumn), userID, effectiveDate).Scan(&claimed)
+		if claimed {
+			http.Error(w, `{"error": "You already claimed this mission today!"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 4. Figure out WHAT the quest is today using the Deterministic Seed
+		seedInt := int64(0)
+		for _, char := range effectiveDate { seedInt += int64(char) }
+		dailyRand := rand.New(rand.NewSource(seedInt))
+		
+		todaysEasy := easyQuests[dailyRand.Intn(len(easyQuests))]
+		todaysMed := medQuests[dailyRand.Intn(len(medQuests))]
+		todaysHard := hardQuests[dailyRand.Intn(len(hardQuests))]
+
+		var activeQuest Quest
+		if req.Difficulty == "easy" { activeQuest = todaysEasy }
+		if req.Difficulty == "medium" { activeQuest = todaysMed }
+		if req.Difficulty == "hard" { activeQuest = todaysHard }
+
+		// 5. READ THE LOCAL CACHE (No slow API calls!)
+		cacheMutex.RLock()
+		dataBytes := cachedMatchesData
+		cacheMutex.RUnlock()
+
+		if len(dataBytes) == 0 {
+			http.Error(w, `{"error": "Match history is warming up. Try again in 1 minute."}`, http.StatusServiceUnavailable)
+			return
+		}
+
+		var cacheData struct { Data []struct { Match map[string]interface{} `json:"match"` } `json:"data"` }
+		json.Unmarshal(dataBytes, &cacheData)
+
+		// --- STAT AGGREGATORS ---
+		totalMatches := 0
+		totalAssists, totalDamage, totalHeadshots, totalKills, totalRoundsWon, totalScore, totalRoundsPlayed := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
+		lethalForce, positiveImpact, hardCarry, flawlessVictory, combatMedic := false, false, false, false, false
+
+		// 6. SCAN MATCHES
+		for _, m := range cacheData.Data {
+			meta, _ := m.Match["metadata"].(map[string]interface{})
+			
+			// Extract time
+			var matchTime float64
+			if t, ok := meta["game_start"].(float64); ok { matchTime = t }
+			if s, ok := meta["started_at"].(string); ok {
+				if p, e := time.Parse(time.RFC3339, s); e == nil { matchTime = float64(p.Unix()) }
+			}
+
+			// ONLY count matches played AFTER 2:00 AM today!
+			if matchTime < float64(resetTime.Unix()) {
+				continue // Cached matches are sorted newest first, but we continue just to be safe
+			}
+
+			// Find our player in the match
+			var allPlayers []interface{}
+			if pMap, ok := m.Match["players"].(map[string]interface{}); ok { allPlayers, _ = pMap["all_players"].([]interface{})
+			} else if pArr, ok := m.Match["players"].([]interface{}); ok { allPlayers = pArr }
+
+			for _, p := range allPlayers {
+				playerMap, ok := p.(map[string]interface{})
+				if !ok { continue }
+
+				name, _ := playerMap["name"].(string)
+				if strings.EqualFold(name, linkedPlayer) {
+					totalMatches++
+					stats, _ := playerMap["stats"].(map[string]interface{})
+					
+					k, _ := stats["kills"].(float64)
+					d, _ := stats["deaths"].(float64)
+					a, _ := stats["assists"].(float64)
+					dmg, _ := stats["damage"].(float64)
+					hs, _ := stats["headshots"].(float64)
+					score, _ := stats["score"].(float64)
+
+					totalKills += k
+					totalAssists += a
+					totalDamage += dmg
+					totalHeadshots += hs
+					totalScore += score
+
+					// Calculate Rounds Played & Won
+					myTeamName, _ := playerMap["team"].(string)
+					myRoundsWon, enemyRoundsWon := 0.0, 0.0
+					
+					if teamsArr, ok := m.Match["teams"].([]interface{}); ok {
+						for _, t := range teamsArr {
+							tData, _ := t.(map[string]interface{})
+							tID, _ := tData["team_id"].(string)
+							rWon, _ := tData["rounds_won"].(float64)
+							if strings.EqualFold(tID, myTeamName) { myRoundsWon = rWon } else { enemyRoundsWon = rWon }
+						}
+					}
+					
+					totalRoundsWon += myRoundsWon
+					roundsPlayed := myRoundsWon + enemyRoundsWon
+					totalRoundsPlayed += roundsPlayed
+
+					// Single Match Checks
+					if k >= 15 { lethalForce = true }
+					if k >= 25 { hardCarry = true }
+					if d == 0 { d = 1 } // Prevent divide by zero
+					if (k / d) > 1.0 { positiveImpact = true }
+					if (myRoundsWon - enemyRoundsWon) >= 5 { flawlessVictory = true }
+					if a >= 10 && (roundsPlayed - d) >= 10 { combatMedic = true }
+					
+					break // Found the player, move to next match
+				}
+			}
+		}
+
+		// 7. EVALUATE THE QUEST
+		passed := false
+		progressMsg := ""
+
+		switch activeQuest.Title {
+		case "Warmup Routine": passed = totalMatches >= 2; progressMsg = fmt.Sprintf("%d/2 Matches", totalMatches)
+		case "Supporting Cast": passed = totalAssists >= 15; progressMsg = fmt.Sprintf("%.0f/15 Assists", totalAssists)
+		case "Chip Damage": passed = totalDamage >= 2500; progressMsg = fmt.Sprintf("%.0f/2500 Damage", totalDamage)
+		case "Consistent": 
+			acs := 0.0
+			if totalRoundsPlayed > 0 { acs = totalScore / totalRoundsPlayed }
+			passed = acs >= 150; progressMsg = fmt.Sprintf("Current ACS: %.0f", acs)
+		
+		case "Clicking Heads": passed = totalHeadshots >= 20; progressMsg = fmt.Sprintf("%.0f/20 Headshots", totalHeadshots)
+		case "Lethal Force": passed = lethalForce; progressMsg = "Requires 15+ kills in one match."
+		case "Securing the Bag": passed = totalRoundsWon >= 15; progressMsg = fmt.Sprintf("%.0f/15 Rounds Won", totalRoundsWon)
+		case "Positive Impact": passed = positiveImpact; progressMsg = "Requires a >1.0 KD in a match."
+
+		case "Hard Carry": passed = hardCarry; progressMsg = "Requires 25+ kills in one match."
+		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 5+ rounds."
+		case "Combat Medic": passed = combatMedic; progressMsg = "Requires 10 assists & 10 rounds survived."
+		case "Top Fragger": passed = totalKills >= 50; progressMsg = fmt.Sprintf("%.0f/50 Kills", totalKills)
+		}
+
+		// 8. PAYOUT OR REJECT
+		if !passed {
+			http.Error(w, fmt.Sprintf(`{"error": "Mission not complete. %s"}`, progressMsg), http.StatusBadRequest)
+			return
+		}
+
+		tx, _ := DB.Begin()
+		tx.Exec(fmt.Sprintf("UPDATE user_quests SET %s = 1 WHERE discord_id = ? AND quest_date = ?", claimColumn), userID, effectiveDate)
+		tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", activeQuest.Reward, userID)
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Mission Accomplished! +%d FT", "reward": %d}`, activeQuest.Reward, activeQuest.Reward)
+	})
+
 	// GET: Fetch a user's card inventory
 	mux.HandleFunc("OPTIONS /api/inventory", func(w http.ResponseWriter, r *http.Request) {
 		applyCORS(w, r, allowed)
@@ -486,6 +862,77 @@ func main() {
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, winName, winRarity, winImage)
+	})
+
+	// GET: Fetch the Leaderboards (Top Tokens and Top Collectors)
+	mux.HandleFunc("OPTIONS /api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+
+		type LeaderboardUser struct {
+			Username string  `json:"username"`
+			Avatar   string  `json:"avatar"`
+			Score    float64 `json:"score"`
+		}
+
+		type LeaderboardRes struct {
+			TopTokens []LeaderboardUser `json:"top_tokens"`
+			TopCards  []LeaderboardUser `json:"top_cards"`
+		}
+
+		res := LeaderboardRes{
+			TopTokens: make([]LeaderboardUser, 0),
+			TopCards:  make([]LeaderboardUser, 0),
+		}
+
+		// 1. Get Top 10 Richest Users (Fredtokens)
+		rows1, err := DB.Query("SELECT discord_id, username, avatar_url, fredtokens FROM users ORDER BY fredtokens DESC LIMIT 10")
+		if err == nil {
+			for rows1.Next() {
+				var id, name, avatarHash string
+				var tokens float64
+				rows1.Scan(&id, &name, &avatarHash, &tokens)
+				
+				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
+				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
+				
+				res.TopTokens = append(res.TopTokens, LeaderboardUser{Username: name, Avatar: avatar, Score: tokens})
+			}
+			rows1.Close()
+		}
+
+		// 2. Get Top 10 Card Collectors (Sum of all quantities in inventory)
+		// 2. Get Top 10 Card Collectors (Count UNIQUE cards they currently own)
+		rows2, err := DB.Query(`
+			SELECT u.discord_id, u.username, u.avatar_url, COUNT(i.card_id) as total_cards 
+			FROM users u 
+			JOIN inventory i ON u.discord_id = i.discord_id 
+			WHERE i.quantity > 0
+			GROUP BY u.discord_id 
+			ORDER BY total_cards DESC 
+			LIMIT 10
+		`)
+		if err == nil {
+			for rows2.Next() {
+				var id, name, avatarHash string
+				var cards float64 // COUNT() returns a number we can store as float64 to match our struct
+				rows2.Scan(&id, &name, &avatarHash, &cards)
+				
+				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
+				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
+				
+				res.TopCards = append(res.TopCards, LeaderboardUser{Username: name, Avatar: avatar, Score: cards})
+			}
+			rows2.Close()
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(res)
 	})
 
 	// POST: Shred a card for Fredtokens
@@ -1412,6 +1859,17 @@ func initDB() {
 		FOREIGN KEY(card_id) REFERENCES cards(id)
 	);`
 
+	createQuestsTable := `
+	CREATE TABLE IF NOT EXISTS user_quests (
+		discord_id TEXT,
+		quest_date TEXT,          -- Stores the specific day (e.g. "2026-04-27")
+		easy_claimed BOOLEAN DEFAULT 0,
+		med_claimed BOOLEAN DEFAULT 0,
+		hard_claimed BOOLEAN DEFAULT 0,
+		PRIMARY KEY (discord_id, quest_date)
+	);`
+
+
 	_, err = DB.Exec(createUsersTable)
 	if err != nil {
 		log.Fatal("Failed to create users table:", err)
@@ -1429,8 +1887,13 @@ func initDB() {
 	_, err = DB.Exec(createInventoryTable)
 	if err != nil { log.Fatal("Failed to create inventory table:", err) }
 
+	_, err = DB.Exec(createQuestsTable)
+	if err != nil { log.Fatal("Failed to create quests table:", err) }
+
 	// --- DATABASE MIGRATION ---
 	DB.Exec("ALTER TABLE cards ADD COLUMN season TEXT DEFAULT 'Season 1'")
+	// NEW: Add a column to track the exact time of their last daily claim
+	DB.Exec("ALTER TABLE users ADD COLUMN last_daily_claim TEXT DEFAULT ''")
 
 	log.Println("Database initialized successfully!")
 }
