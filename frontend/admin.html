@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Fred Admin Panel</title>
+    <style>
+        body { background: #111; color: white; font-family: sans-serif; padding: 50px; }
+        .admin-box { background: #222; padding: 30px; border-radius: 8px; max-width: 400px; }
+        input, select, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
+        button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; }
+    </style>
+</head>
+<body>
+
+    <div class="admin-box">
+        <h2>Add Trading Card</h2>
+        
+        <label>Admin Password:</label>
+        <input type="password" id="adminToken" placeholder="Enter FRED_ADMIN_TOKEN">
+
+        <label>Card Name:</label>
+        <input type="text" id="cardName" placeholder="e.g. Graussbyt Base">
+
+        <label>Rarity:</label>
+        <select id="cardRarity">
+            <option value="iron">Iron</option>
+            <option value="bronze">Bronze</option>
+            <option value="diamond">Diamond</option>
+            <option value="ascendant">Ascendant</option>
+            <option value="immortal">Immortal</option>
+            <option value="radiant">Radiant</option>
+        </select>
+
+        <label>Image URL:</label>
+        <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
+
+        <button onclick="addCard()">Add to Database</button>
+        <p id="statusMsg"></p>
+    </div>
+
+        <script>
+        function getApiBase() {
+            if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+                return "http://localhost:8080";
+            }
+            return "https://api.fredericfan.club";
+        }
+
+        async function addCard() {
+            const btn = document.querySelector('button');
+            const msg = document.getElementById('statusMsg');
+            btn.innerText = "Loading...";
+            msg.innerText = "";
+
+            try {
+                const token = document.getElementById('adminToken').value;
+                const data = {
+                    name: document.getElementById('cardName').value,
+                    rarity: document.getElementById('cardRarity').value,
+                    image_url: document.getElementById('cardImage').value
+                };
+
+                const response = await fetch(`${getApiBase()}/api/admin/cards`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Admin-Token': token
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                // First, check if the response is actually JSON before trying to parse it!
+                const contentType = response.headers.get("content-type");
+                let result;
+                if (contentType && contentType.indexOf("application/json") !== -1) {
+                    result = await response.json();
+                } else {
+                    // If it's not JSON, grab the plain text so we can see the error
+                    const textError = await response.text();
+                    throw new Error(`Server returned non-JSON: ${textError}`);
+                }
+                
+                if (response.ok) {
+                    msg.style.color = "lime";
+                    msg.innerText = "Success! Card ID: " + result.card_id;
+                    document.getElementById('cardName').value = ''; 
+                } else {
+                    msg.style.color = "red";
+                    msg.innerText = "Error: " + (result.error || "Unknown server error");
+                }
+            } catch (error) {
+                console.error(error);
+                msg.style.color = "red";
+                msg.innerText = "Fetch Error: " + error.message;
+            } finally {
+                btn.innerText = "Add to Database";
+            }
+        }
+    </script>
+    </body>
+</html>

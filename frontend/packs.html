@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FRED Prediction Market</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    </head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="index.html#roster">Roster</a></li>
+                <li><a href="#about">À propos</a></li>
+                <li><a href="matches.html">Matches</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html" class="nav-active">Betting</a></li>
+            </ul>
+
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a href="https://api.fredericfan.club/api/auth/discord" class="login-btn">Login with Discord</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>Case</h1>
+        </div>
+        </header>
+        <main class="container" style="padding: 60px 0 100px 0;">
+
+            <div class="unboxing-wrapper">
+                <div class="target-line"></div>
+
+                <div class="spinner-window">
+                    <div id="spinnerTrack" class="spinner-track">
+                    </div>
+                </div>
+            </div>
+
+            <div class="unboxing-controls" style="text-align: center; margin-top: 20px;">
+                <button id="btnOpenCase" class="fred-btn">Open Case (500 FT)</button>
+            </div>
+
+            <div id="winnerReveal" style="display: none; text-align: center; margin-top: 30px;">
+                <h2 style="color: white; font-family: 'Orbitron', sans-serif;">YOU PULLED:</h2>
+                <div id="winnerCardDisplay"></div>
+            </div>
+        </main>
+
+        <footer>
+        <div class="container">
+            <div class="footer-logo">
+                <img src="images/LogoTransparent.png" alt="" class="footer-logo-img" width="50" height="50" decoding="async">
+                <span class="footer-logo-text">FREDERIC FANCLUB</span>
+            </div>
+            <div class="footer-content">
+                © 2026 FRED Esports. Sharks in the Game.
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/site.js?v=pack3"></script>
+</body>
+</html>

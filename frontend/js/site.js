@@ -6,6 +6,23 @@ function getApiBase() {
     return "https://api.fredericfan.club";
 }
 
+document.addEventListener('DOMContentLoaded', () => {
+    // --- DYNAMIC DISCORD LOGIN ---
+    const loginBtn = document.getElementById('discordLoginBtn');
+    if (loginBtn) {
+        // Remove href just in case it was left in the HTML
+        loginBtn.removeAttribute('href'); 
+        
+        loginBtn.addEventListener('click', (e) => {
+            e.preventDefault(); // This stops your smooth-scroll script from crashing!
+            e.stopPropagation(); // This prevents the click from bubbling up
+            
+            // Redirect the user to the correct API manually
+            window.location.href = `${getApiBase()}/api/auth/discord`;
+        });
+    }
+});
+
 (function () {
     const observerOptions = {
         threshold: 0.1,
@@ -1225,3 +1242,108 @@ window.cancelEntireMarket = async function() {
         msgEl.textContent = "Network error.";
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const btnOpenCase = document.getElementById('btnOpenCase');
+    if (!btnOpenCase) return; // Only run if we are on the packs page
+
+    const track = document.getElementById('spinnerTrack');
+    const winnerReveal = document.getElementById('winnerReveal');
+    const winnerCardDisplay = document.getElementById('winnerCardDisplay');
+    
+    // Some fake data to test the UI before we connect it to the Go Backend
+    const dummyCards = [
+        { name: "Graussbyt Base", rarity: "blue" },
+        { name: "Vincent Base", rarity: "blue" },
+        { name: "Heri Main", rarity: "purple" },
+        { name: "XTrix Clutch", rarity: "pink" },
+        { name: "Fred Mascot", rarity: "red" }
+    ];
+
+    btnOpenCase.addEventListener('click', async () => {
+        btnOpenCase.disabled = true;
+        btnOpenCase.innerText = "Opening...";
+        winnerReveal.style.display = "none";
+        track.style.transition = "none"; 
+        track.style.transform = "translateX(0px)"; 
+        track.innerHTML = ""; 
+
+        try {
+            // 1. Ask the server to buy the pack and give us a card
+            const response = await fetch(`${getApiBase()}/api/economy/buy-pack`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include'
+                // NOTE: Make sure your fetch includes credentials if you are using cookies!
+                // credentials: 'include' 
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                alert("Error: " + (data.error || "Could not open pack"));
+                btnOpenCase.disabled = false;
+                btnOpenCase.innerText = "Open Case (500 FT)";
+                return;
+            }
+
+            // 2. We have the real winning card from the DB!
+            const winningCardData = data.card;
+            const winningIndex = 45; 
+
+            // Just a visual filler array for the spinner effect
+            const fillerRarities = ["blue", "blue", "blue", "purple", "blue"]; 
+
+            // 3. Generate the 60 visual cards
+            for (let i = 0; i < 60; i++) {
+                const cardEl = document.createElement('div');
+                
+                if (i === winningIndex) {
+                    // Inject the REAL winner at the finish line
+                    cardEl.className = `tcg-card rarity-${winningCardData.rarity}`;
+                    cardEl.innerHTML = `<span>${winningCardData.name}</span>`;
+                } else {
+                    // Inject random visual filler
+                    const randomFill = fillerRarities[Math.floor(Math.random() * fillerRarities.length)];
+                    cardEl.className = `tcg-card rarity-${randomFill}`;
+                    cardEl.innerHTML = `<span>???</span>`;
+                }
+                
+                track.appendChild(cardEl);
+            }
+
+            track.getBoundingClientRect(); // Force render
+
+            // 4. Calculate where to stop (Same math as before)
+            const totalCardWidth = 160 + 20; 
+            const offsetToWinner = (winningIndex * totalCardWidth);
+            const centerAdjustment = (track.parentElement.offsetWidth / 2) - (totalCardWidth / 2);
+            const randomSuspense = Math.floor(Math.random() * 80) - 40; 
+            const finalTransform = offsetToWinner - centerAdjustment + randomSuspense;
+
+            // 5. Spin it!
+            setTimeout(() => {
+                track.style.transition = "transform 6s cubic-bezier(0.15, 0.9, 0.15, 1)";
+                track.style.transform = `translateX(-${finalTransform}px)`;
+            }, 50);
+
+            // 6. Reveal the winner
+            setTimeout(() => {
+                winnerCardDisplay.innerHTML = `<div class="tcg-card rarity-${winningCardData.rarity}" style="margin: 0 auto; width: 200px; height: 280px; font-size: 1.2rem;"><span>${winningCardData.name}</span></div>`;
+                winnerReveal.style.display = "block";
+                
+                btnOpenCase.disabled = false;
+                btnOpenCase.innerText = "Open Case (500 FT)";
+                
+                // Optional: Trigger a function here to update the user's token balance in the UI!
+                
+            }, 6000); 
+
+        } catch (error) {
+            console.error("Failed to open case:", error);
+            alert("Something went wrong with the server.");
+            btnOpenCase.disabled = false;
+            btnOpenCase.innerText = "Open Case (500 FT)";
+        }
+    });
+});

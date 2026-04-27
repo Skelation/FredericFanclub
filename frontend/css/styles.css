@@ -1187,3 +1187,72 @@ footer {
 
 .btn-loss { background: rgba(255, 70, 85, 0.1); color: #ff4655; border: 1px solid rgba(255, 70, 85, 0.3); }
 .btn-loss:hover { background: #ff4655; color: white; box-shadow: 0 0 20px rgba(255,70,85,0.4); transform: translateY(-2px); }
+
+
+/* --- TRADING CARD UI --- */
+.unboxing-wrapper {
+    position: relative;
+    width: 100%;
+    max-width: 900px;
+    height: 280px;
+    margin: 0 auto;
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid rgba(255, 255, 255, 0.1);
+    border-radius: 8px;
+    overflow: hidden; /* Hides the cards outside the box */
+}
+
+/* The exact center target line */
+.target-line {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: #FFD700; /* Gold */
+    box-shadow: 0 0 10px #FFD700;
+    transform: translateX(-50%);
+    z-index: 10;
+}
+
+.spinner-window {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.spinner-track {
+    display: flex;
+    width: max-content;
+    /* THIS IS THE MAGIC CS:GO PHYSICS ENGINE */
+    transition: transform 6s cubic-bezier(0.15, 0.9, 0.15, 1);
+}
+
+/* The Vertical Card Shape */
+.tcg-card {
+    width: 160px;
+    height: 220px;
+    margin: 0 10px; /* 10px spacing between cards */
+    background: #111;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    padding-bottom: 10px;
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: bold;
+    text-transform: uppercase;
+    background-size: cover;
+    background-position: center;
+}
+
+/* --- VALORANT RANK RARITIES --- */
+.rarity-iron { border: 3px solid #5a5a5a; box-shadow: inset 0 -40px 40px -20px rgba(90, 90, 90, 0.8); color: #fff;}
+.rarity-bronze { border: 3px solid #b57c4a; box-shadow: inset 0 -40px 40px -20px rgba(181, 124, 74, 0.8); color: #fff;}
+.rarity-diamond { border: 3px solid #b489ff; box-shadow: inset 0 -40px 40px -20px rgba(180, 137, 255, 0.8); color: #fff;}
+.rarity-ascendant { border: 3px solid #2bc97e; box-shadow: inset 0 -40px 40px -20px rgba(43, 201, 126, 0.8); color: #fff;}
+.rarity-immortal { border: 3px solid #eb294b; box-shadow: inset 0 -40px 40px -20px rgba(235, 41, 75, 0.8); color: #fff;}
+.rarity-radiant { border: 3px solid #ffea82; box-shadow: inset 0 -40px 40px -20px rgba(255, 234, 130, 0.8); color: #111;} /* Dark text for the gold card */

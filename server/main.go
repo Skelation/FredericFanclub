@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -190,6 +191,76 @@ func main() {
 		http.Redirect(w, r, frontendURL+"/", http.StatusTemporaryRedirect)
 	})
 
+	// POST: Buy and Open a Card Pack (500 FT)
+	// POST: Buy and Open a Card Pack (500 FT)
+	mux.HandleFunc("/api/economy/buy-pack", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+
+		// 1. Handle Browser Preflight
+		if r.Method == http.MethodOptions {
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		// 2. Only allow POST
+		if r.Method != http.MethodPost {
+			http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+			return
+		}
+
+		currentUserID := getUserIDFromCookie(r)
+		if currentUserID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		// 3. Database Column Sync: Use 'fredtokens'
+		var userTokens float64
+		err := DB.QueryRow("SELECT fredtokens FROM users WHERE discord_id = ?", currentUserID).Scan(&userTokens)
+		if err != nil || userTokens < 500 {
+			http.Error(w, `{"error": "insufficient funds"}`, http.StatusBadRequest)
+			return
+		}
+
+		// 4. RNG Logic (Using math/rand)
+		roll := rand.Float64()
+		var targetRarity string
+		if roll < 0.002 { targetRarity = "radiant" 
+		} else if roll < 0.02 { targetRarity = "immortal" 
+		} else if roll < 0.08 { targetRarity = "ascendant" 
+		} else if roll < 0.20 { targetRarity = "diamond" 
+		} else if roll < 0.50 { targetRarity = "bronze" 
+		} else { targetRarity = "iron" }
+
+		// 5. Pull Card
+		var cardID int
+		var cardName, cardRarity, cardImage string
+		err = DB.QueryRow("SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? ORDER BY RANDOM() LIMIT 1", targetRarity).Scan(&cardID, &cardName, &cardRarity, &cardImage)
+		
+		if err != nil {
+			http.Error(w, `{"error": "No cards available for rarity: `+targetRarity+`"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// 6. Transaction
+		tx, _ := DB.Begin()
+		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - 500 WHERE discord_id = ?", currentUserID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db update failed"}`, 500); return }
+
+		_, err = tx.Exec(`
+			INSERT INTO inventory (discord_id, card_id, quantity) 
+			VALUES (?, ?, 1)
+			ON CONFLICT(discord_id, card_id) DO UPDATE SET quantity = quantity + 1
+		`, currentUserID, cardID)
+		if err != nil { tx.Rollback(); http.Error(w, `{"error": "inventory update failed"}`, 500); return }
+
+		tx.Commit()
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, cardName, cardRarity, cardImage)
+	})
+	
 	// ==========================================
 	// --- PREDICTION MARKET / BETTING ROUTES ---
 	// ==========================================
@@ -355,6 +426,44 @@ func main() {
 		tx.Commit()
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "new_balance": %g}`, balance-req.Amount)
+	})
+
+// ADMIN: Add a new trading card to the catalog
+	mux.HandleFunc("OPTIONS /api/admin/cards", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/cards", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		
+		// Security Check: Only the Admin can add cards!
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct {
+			Name     string `json:"name"`
+			Rarity   string `json:"rarity"` // 'blue', 'purple', 'pink', 'red'
+			ImageURL string `json:"image_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Insert the new card into the catalog
+		result, err := DB.Exec("INSERT INTO cards (name, rarity, image_url) VALUES (?, ?, ?)", req.Name, req.Rarity, req.ImageURL)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+
+		newID, _ := result.LastInsertId()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Card added!", "card_id": %d}`, newID)
 	})
 
 	// ADMIN: Preview a randomly generated prop bet for a specific player
@@ -908,6 +1017,24 @@ func initDB() {
 		FOREIGN KEY(discord_id) REFERENCES users(discord_id)
 	);`
 
+	createCardsTable := `
+	CREATE TABLE IF NOT EXISTS cards (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		name TEXT,
+		rarity TEXT,       -- 'blue', 'purple', 'pink', 'red'
+		image_url TEXT
+	);`
+
+	createInventoryTable := `
+	CREATE TABLE IF NOT EXISTS inventory (
+		discord_id TEXT,
+		card_id INTEGER,
+		quantity INTEGER DEFAULT 0,
+		PRIMARY KEY (discord_id, card_id),
+		FOREIGN KEY(discord_id) REFERENCES users(discord_id),
+		FOREIGN KEY(card_id) REFERENCES cards(id)
+	);`
+
 	_, err = DB.Exec(createUsersTable)
 	if err != nil {
 		log.Fatal("Failed to create users table:", err)
@@ -917,6 +1044,13 @@ func initDB() {
 	if err != nil {
 		log.Fatal("Failed to create bets table:", err)
 	}
+
+	// --- NEW CARD TABLES ---
+	_, err = DB.Exec(createCardsTable)
+	if err != nil { log.Fatal("Failed to create cards table:", err) }
+
+	_, err = DB.Exec(createInventoryTable)
+	if err != nil { log.Fatal("Failed to create inventory table:", err) }
 
 	log.Println("Database initialized successfully!")
 }
@@ -1124,4 +1258,12 @@ func startMatchPoller(base, matchPath, apiKey string) {
 			log.Printf("Background Poller: Updated %s with %d total matches", filePath, len(finalData))
 		}
 	}()
+}
+
+func getUserIDFromCookie(r *http.Request) string {
+	cookie, err := r.Cookie("fred_user_id")
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
 }
