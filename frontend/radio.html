@@ -459,15 +459,32 @@
         // --- VOLUME LOGIC ---
         const volumeSlider = document.getElementById('volumeSlider');
         const volumeIcon = document.getElementById('volumeIcon');
+        const STORAGE_KEY = 'fred_radio_volume';
 
-        audio.volume = volumeSlider.value;
+        // 1. Check if the user has a saved volume from a previous visit
+        const savedVolume = localStorage.getItem(STORAGE_KEY);
+        if (savedVolume !== null) {
+            volumeSlider.value = savedVolume;
+        }
 
-        volumeSlider.addEventListener('input', (e) => {
-            const vol = parseFloat(e.target.value);
-            audio.volume = vol;
+        // 2. Helper function to change the icon based on volume level
+        function updateVolumeIcon(vol) {
             if (vol === 0) { volumeIcon.textContent = '🔇'; } 
             else if (vol < 0.5) { volumeIcon.textContent = '🔉'; } 
             else { volumeIcon.textContent = '🔊'; }
+        }
+
+        // 3. Apply the initial volume to the audio player and the UI
+        const initialVol = parseFloat(volumeSlider.value);
+        audio.volume = initialVol;
+        updateVolumeIcon(initialVol);
+
+        // 4. Update audio, icon, AND localStorage whenever the slider moves
+        volumeSlider.addEventListener('input', (e) => {
+            const vol = parseFloat(e.target.value);
+            audio.volume = vol;
+            updateVolumeIcon(vol);
+            localStorage.setItem(STORAGE_KEY, vol); // Save to browser memory!
         });
 
         // --- QUEUE LOGIC ---
