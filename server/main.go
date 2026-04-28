@@ -1907,7 +1907,12 @@ func logRequests(next http.Handler) http.Handler {
 
 func parseOrigins(raw string) []string {
 	if strings.TrimSpace(raw) == "" {
-		return []string{"http://localhost:3000", "http://127.0.0.1:3000", "http://fredericfan.club:3000"}
+		return []string{
+			"http://localhost:3000", 
+			"http://127.0.0.1:3000", 
+			"https://fredericfan.club",
+			"https://www.fredericfan.club",
+		}
 	}
 	parts := strings.Split(raw, ",")
 	out := make([]string, 0, len(parts))
