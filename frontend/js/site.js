@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initPlayerProfilePage();
 
     // --- AUTHENTICATION & WALLET ---
-    window.loadUserProfile = async function() {
+    window.loadUserProfile = async function(skipMarketReload = false) {
         const authContainer = document.getElementById('authContainer');
         if (!authContainer) return;
 
@@ -96,7 +96,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 `;
                 if (typeof loadBettingMarket === 'function') {
+                    if (!skipMarketReload && typeof loadBettingMarket === 'function') {
                     loadBettingMarket();
+                    }
                 }
             }
         } catch (error) {
@@ -864,6 +866,89 @@ async function loadBettingMarket() {
     widget.style.display = 'block';
 
     const apiBase = getApiBase();
+
+    // === 1. PERSISTENT WEBSOCKET CONNECTION ===
+    if (!window.bettingSocket || window.bettingSocket.readyState === WebSocket.CLOSED) {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const cleanHost = apiBase.replace(/^https?:\/\//, ''); 
+        const wsUrl = `${wsProtocol}//${cleanHost}/api/ws/betting`;
+
+        window.bettingSocket = new WebSocket(wsUrl);
+
+        window.bettingSocket.onclose = function() {
+            setTimeout(() => { if (document.getElementById('bettingWidget')) loadBettingMarket(); }, 3000);
+        };
+
+        window.bettingSocket.onmessage = function(event) {
+            const msg = JSON.parse(event.data);
+
+            if (msg.type === "new_bet") {
+                const bet = msg.payload;
+                const betsList = document.getElementById('liveBetsList');
+                if (!betsList) return;
+
+                if (betsList.innerHTML.includes("No bets placed yet")) betsList.innerHTML = "";
+
+                const isOver = bet.choice === 'over';
+                const choiceColor = isOver ? '#00ff64' : '#ff4655';
+                const amountFormatted = Math.round(bet.amount * 10) / 10;
+
+                let displayChoice = bet.choice;
+                const typeName = document.getElementById('propTypeName')?.textContent || '';
+                if (typeName === 'MATCH RESULT') displayChoice = isOver ? 'WIN' : 'LOSS';
+
+                const newBetDiv = document.createElement('div');
+                newBetDiv.style.cssText = `display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 8px; border: 1px solid ${choiceColor}; margin-bottom: 0px; height: 0; opacity: 0; overflow: hidden; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);`;
+                
+                newBetDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="${escapeHtml(bet.avatar)}" style="width: 32px; height: 32px; border-radius: 50%; border: 1px solid ${choiceColor};">
+                        <span style="font-weight: 700; color: white; font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">${escapeHtml(bet.username)}</span>
+                    </div>
+                    <div style="font-family: 'Rajdhani', sans-serif; font-size: 1.1rem;">
+                        <span style="color: rgba(255,255,255,0.3); font-size: 0.85rem; margin-right: 8px;">#${bet.id}</span>
+                        <span style="color: ${choiceColor}; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-right: 12px;">${escapeHtml(displayChoice)}</span>
+                        <span style="color: #00d4ff; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1rem;">${amountFormatted} FT</span>
+                    </div>
+                `;
+
+                betsList.prepend(newBetDiv);
+                newBetDiv.offsetHeight; // Force browser reflow to trigger animation
+
+                requestAnimationFrame(() => {
+                    newBetDiv.style.height = "58px"; 
+                    newBetDiv.style.opacity = "1";
+                    newBetDiv.style.marginBottom = "10px";
+                    newBetDiv.style.boxShadow = `0 0 20px ${choiceColor}40`; 
+                    setTimeout(() => {
+                        newBetDiv.style.boxShadow = "none";
+                        newBetDiv.style.borderColor = "rgba(255,255,255,0.05)";
+                    }, 1000);
+                });
+            }
+            else if (msg.type === "market_locked") {
+                const badge = document.getElementById('marketStatusBadge');
+                if (badge) {
+                    badge.textContent = "MARKET LOCKED";
+                    badge.className = "market-badge status-closed";
+                    badge.style.color = "#ffaa00"; 
+                    badge.style.borderColor = "rgba(255, 170, 0, 0.3)";
+                    badge.style.background = "rgba(255, 170, 0, 0.1)";
+                }
+                const btnOver = document.getElementById('btnOver');
+                const btnUnder = document.getElementById('btnUnder');
+                const msgEl = document.getElementById('betMessage');
+                if (btnOver) { btnOver.disabled = true; btnOver.style.opacity = "0.5"; }
+                if (btnUnder) { btnUnder.disabled = true; btnUnder.style.opacity = "0.5"; }
+                if (msgEl) { msgEl.textContent = "Bets are locked! Good luck!"; msgEl.style.color = "#ffaa00"; }
+            }
+            else if (["market_resolved", "market_cancelled", "market_published"].includes(msg.type)) {
+                loadBettingMarket();
+                if (typeof window.loadUserProfile === 'function') window.loadUserProfile(); 
+            }
+        };
+    }
+    // ==============================================
     
     try {
         // NEW: Fetching the single event market!
@@ -984,6 +1069,73 @@ async function loadBettingMarket() {
     } catch (err) {
         console.error("Failed to load betting market", err);
     }
+
+    // Connect to the WebSocket
+    if (!window.bettingSocket || window.bettingSocket.readyState === WebSocket.CLOSED) {
+        const apiBase = getApiBase(); // e.g., "http://localhost:8080"
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const cleanHost = apiBase.replace(/^https?:\/\//, ''); 
+        const wsUrl = `${wsProtocol}//${cleanHost}/api/ws/betting`;
+
+        window.bettingSocket = new WebSocket(wsUrl);
+
+        window.bettingSocket.onmessage = function(event) {
+            const msg = JSON.parse(event.data);
+
+            // EVENT 1: A new bet drops in!
+            if (msg.type === "new_bet") {
+                const bet = msg.payload;
+                const betsList = document.getElementById('liveBetsList');
+                if (!betsList) return;
+
+                // Create the new bet element
+                const newBetDiv = document.createElement('div');
+                const choiceColor = bet.choice === 'over' ? '#00ff64' : '#ff4655';
+                
+                // Start it with 0 height and 0 opacity for a slick slide-down animation
+                newBetDiv.style.cssText = `display: flex; align-items: center; justify-content: space-between; background: rgba(0,0,0,0.4); padding: 12px 16px; border-radius: 8px; border: 1px solid ${choiceColor}; margin-bottom: 0px; height: 0; opacity: 0; overflow: hidden; transition: all 0.4s ease;`;
+                
+                newBetDiv.innerHTML = `
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <img src="${bet.avatar}" style="width: 32px; height: 32px; border-radius: 50%;">
+                        <span style="color: white; font-weight: bold;">${bet.username}</span>
+                    </div>
+                    <div>
+                        <span style="color: ${choiceColor}; font-weight: bold; margin-right: 12px;">${bet.choice.toUpperCase()}</span>
+                        <span style="color: #00d4ff; font-weight: bold;">${bet.amount} FT</span>
+                    </div>
+                `;
+
+                // Add it to the top of the list
+                betsList.prepend(newBetDiv);
+
+                // Force the browser to render the 0-height state, then animate it open
+                newBetDiv.offsetHeight; 
+                requestAnimationFrame(() => {
+                    newBetDiv.style.height = "58px"; 
+                    newBetDiv.style.opacity = "1";
+                    newBetDiv.style.marginBottom = "10px";
+                });
+            }
+            
+            // EVENT 2: The market was resolved (Win/Loss)!
+            else if (msg.type === "market_resolved") {
+                // The cleanest way to handle a massive state change is to 
+                // command the browser to re-fetch the market and their user wallet!
+                loadBettingMarket();
+                if (typeof window.loadUserProfile === 'function') {
+                    window.loadUserProfile(); 
+                }
+            }
+        };
+
+        // Auto-reconnect if the server restarts
+        window.bettingSocket.onclose = function() {
+            setTimeout(() => {
+                if (document.getElementById('bettingWidget')) loadBettingMarket(); 
+            }, 3000);
+        };
+    }
 }
 
 window.placePropBet = async function(choice) {
@@ -1015,7 +1167,7 @@ window.placePropBet = async function(choice) {
             msgEl.style.color = "#00ff64";
             msgEl.textContent = `Success! Bet locked in. New Balance: ${data.new_balance} FT`;
             amountInput.value = '';
-            window.loadUserProfile(); 
+            window.loadUserProfile(true); // <--- PASS TRUE HERE!
         } else {
             msgEl.style.color = "#ff4655";
             msgEl.textContent = data.error || "Failed to place bet.";

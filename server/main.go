@@ -18,6 +18,7 @@ import (
 	"golang.org/x/oauth2"
 	
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/gorilla/websocket"
 )
 
 var (
@@ -36,7 +37,37 @@ type PropMarket struct {
 	IsOpen       bool    `json:"is_open"`
 }
 
+type WSMessage struct {
+	Type    string      `json:"type"`              // e.g., "new_bet", "market_resolved"
+	Payload interface{} `json:"payload,omitempty"` // The actual data
+}
+
+var (
+	upgrader = websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true }, // Allow all origins for now
+	}
+	wsClients = make(map[*websocket.Conn]bool) 
+	wsMutex   sync.Mutex                       // Prevents concurrent map read/write crashes
+	broadcast = make(chan WSMessage)           // The channel we shout events into
+)
+
 func main() {
+	go func() {
+		for {
+			msg := <-broadcast // Wait for a new message
+			
+			wsMutex.Lock() // Lock the doors while we loop through users
+			for client := range wsClients {
+				err := client.WriteJSON(msg)
+				if err != nil {
+					client.Close()
+					delete(wsClients, client)
+				}
+			}
+			wsMutex.Unlock() // Unlock the doors
+		}
+	}()
+
 	loadDotEnv()
 	initDB()
 	initOAuth()
@@ -999,6 +1030,29 @@ func main() {
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "payout": %d, "remaining": %d}`, payoutAmount, quantity-1)
 	})
+
+	mux.HandleFunc("GET /api/ws/betting", func(w http.ResponseWriter, r *http.Request) {
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil { return }
+		defer ws.Close()
+		
+		// Register the new user safely
+		wsMutex.Lock()       
+		wsClients[ws] = true 
+		wsMutex.Unlock()     
+		
+		// Keep the connection alive until they leave the page
+		for {
+			if _, _, err := ws.ReadMessage(); err != nil {
+				// User disconnected, remove them safely
+				wsMutex.Lock()        
+				delete(wsClients, ws) 
+				wsMutex.Unlock()      
+				break
+			}
+		}
+	})
+
 	// ==========================================
 	// --- PREDICTION MARKET / BETTING ROUTES ---
 	// ==========================================
@@ -1150,7 +1204,7 @@ func main() {
 		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - ? WHERE discord_id = ?", req.Amount, discordID)
 		
 		// 2. Insert Detailed Bet Ticket
-		_, err = tx.Exec(`INSERT INTO bets 
+		result, err := tx.Exec(`INSERT INTO bets 
 			(discord_id, bet_category, target_player, prop_type, line_value, choice, amount, locked_multiplier) 
 			VALUES (?, 'prop', ?, ?, ?, ?, ?, ?)`, 
 			discordID, CurrentMarket.Player, CurrentMarket.PropType, CurrentMarket.Line, req.Choice, req.Amount, lockedMultiplier)
@@ -1161,7 +1215,27 @@ func main() {
 			return
 		}
 
+		betID, _ := result.LastInsertId()
 		tx.Commit()
+
+		// --- NEW: WEBSOCKET BROADCAST ---
+		var username, avatarHash string
+		DB.QueryRow("SELECT username, avatar_url FROM users WHERE discord_id = ?", discordID).Scan(&username, &avatarHash)
+		avatarURL := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", discordID, avatarHash)
+		if avatarHash == "" { avatarURL = "https://cdn.discordapp.com/embed/avatars/0.png" }
+
+		broadcast <- WSMessage{
+			Type: "new_bet",
+			Payload: map[string]interface{}{
+				"id":       betID,
+				"username": username,
+				"avatar":   avatarURL,
+				"choice":   req.Choice,
+				"amount":   req.Amount,
+			},
+		}
+		// --------------------------------
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "new_balance": %g}`, balance-req.Amount)
 	})
@@ -1524,6 +1598,7 @@ func main() {
 		marketToPublish.IsOpen = true
 		CurrentMarket = &marketToPublish
 
+		broadcast <- WSMessage{Type: "market_published"}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market is now LIVE!"}`)
 	})
@@ -1580,6 +1655,7 @@ func main() {
 		CurrentMarket = nil
 		tx.Commit()
 
+		broadcast <- WSMessage{Type: "market_cancelled"}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market Aborted! All tokens refunded."}`)
 	})
@@ -1602,6 +1678,7 @@ func main() {
 			CurrentMarket.IsOpen = false
 		}
 
+		broadcast <- WSMessage{Type: "market_locked"}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market Locked! No more bets allowed."}`)
 	})
@@ -1668,6 +1745,7 @@ func main() {
 		CurrentMarket = nil 
 		tx.Commit()
 
+		broadcast <- WSMessage{Type: "market_resolved"}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market resolved as %s! Paid out winners."}`, strings.ToUpper(req.Outcome))
 	})

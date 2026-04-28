@@ -7,3 +7,5 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.42
 	golang.org/x/oauth2 v0.36.0
 )
+
+require github.com/gorilla/websocket v1.5.3 // indirect
