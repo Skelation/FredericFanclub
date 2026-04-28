@@ -6,6 +6,7 @@ dist/
 *.db
 *.db-journal
 server/data/
+data/
 
 # Environment Secrets (Crucial for GitHub safety)
 .env
