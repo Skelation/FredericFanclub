@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  # --- THE GO BACKEND ---
+  backend:
+    build: 
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: fred-live
+    ports:
+      - "8080:8080"
+    env_file:
+      - ./server/.env.prod  # Adjusted to match your tree!
+    volumes:
+      # Sync the new database folder safely
+      - ./server/database:/app/database
+      # Sync your match cache folder
+      - ./server/data:/app/data
+    restart: unless-stopped
+    networks:
+      - fred_network
+
+  # --- THE NGINX FRONTEND ---
+  frontend:
+    image: nginx:alpine
+    container_name: fred-live-frontend
+    ports:
+      - "80:80"
+    volumes:
+      # Mount your HTML/JS/CSS files
+      - ./frontend:/usr/share/nginx/html:ro
+      # If your default.conf has specific routing rules you need, uncomment the line below:
+      # - ./default.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - fred_network
+
+networks:
+  fred_network:
+    driver: bridge

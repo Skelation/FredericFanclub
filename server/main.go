@@ -1884,8 +1884,9 @@ func initDB() {
     
 	// NEW: Check the .env file for a database path. Default to fred.db if none exists.
 	dbPath := strings.TrimSpace(os.Getenv("DB_PATH"))
+	fmt.Println(dbPath)
 	if dbPath == "" {
-		dbPath = "./fred.db"
+		dbPath = "./database/fred.db"
 	}
 
 	DB, err = sql.Open("sqlite3", dbPath)
