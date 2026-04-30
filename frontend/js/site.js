@@ -340,6 +340,7 @@ function renderMatchRow(match, riotName, riotTag, rrOverride = null, roster = []
     }
 
     const outcome = outcomeForPlayer(match, riotName, riotTag);
+    console.log(outcome)
     
     const rrDelta = (rrOverride !== null && rrOverride !== undefined && Number.isFinite(Number(rrOverride))) 
         ? Number(rrOverride) 
@@ -682,6 +683,7 @@ function initMatchFilters(body, matchList, statusEl, apiBase) {
 }
 
 // --- MATCH UI RENDERER (FINAL RR FIX) ---
+// --- MATCH UI RENDERER (FINAL RR FIX) ---
 function renderRosterMatchRow(entry, selectedSet) {
     const matchData = entry.match || {};
     const meta = matchData.metadata || {};
@@ -703,12 +705,9 @@ function renderRosterMatchRow(entry, selectedSet) {
     let rrDelta = null;
 
     if (targetFred) {
-        const outcome = outcomeForPlayer(matchData, targetFred.name, targetFred.tag);
-        if (outcome === 'win') matchClass = 'win';
-        else if (outcome === 'loss') matchClass = 'loss';
+        let outcome = outcomeForPlayer(matchData, targetFred.name, targetFred.tag);
 
         // 2. THE PLOT TWIST RR EXTRACTION!
-        // Look exactly where your Go server is putting it: the 'rrByPlayer' envelope!
         if (entry.rrByPlayer) {
             const searchKey = `${targetFred.name}#${targetFred.tag}`.toLowerCase();
             if (entry.rrByPlayer[searchKey] !== undefined) {
@@ -716,13 +715,21 @@ function renderRosterMatchRow(entry, selectedSet) {
             }
         }
         
-        // Fallback just in case HenrikDev attached it the old way
         if (rrDelta === null) {
             rrDelta = ratingDeltaForPlayer(matchData, targetFred.name, targetFred.tag);
         }
+
+        // 3. THE "REDACTED NAME" BYPASS! 
+        if (outcome === null && rrDelta !== null) {
+            if (rrDelta > 0) outcome = 'win';
+            else if (rrDelta < 0) outcome = 'loss';
+        }
+
+        if (outcome === 'win') matchClass = 'win';
+        else if (outcome === 'loss') matchClass = 'loss';
     }
 
-    // 3. SCORE SORTING
+    // 4. SCORE SORTING (The missing variable is back!)
     let score = "-";
     let redRounds = 0, blueRounds = 0;
 
@@ -747,7 +754,7 @@ function renderRosterMatchRow(entry, selectedSet) {
         }
     }
 
-    // 4. BUILD THE RR DISPLAY
+    // 5. BUILD THE RR DISPLAY
     let rrHTML = `<div style="width: 80px;"></div>`; 
     if (rrDelta !== null) {
         const sign = rrDelta > 0 ? "+" : "";
@@ -757,7 +764,7 @@ function renderRosterMatchRow(entry, selectedSet) {
         rrHTML = `<div style="color: #aaaaaa; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.1rem; width: 80px; text-align: right;">RR —</div>`;
     }
 
-    // 5. ROSTER HTML (Highlights the active player)
+    // 6. ROSTER HTML (Highlights the active player)
     let rosterHTML = "";
     if (roster.length > 0) {
         const names = roster.map(r => {
@@ -769,7 +776,7 @@ function renderRosterMatchRow(entry, selectedSet) {
         rosterHTML = `<div style="color: #00d4ff; font-size: 0.8rem; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px;">👥 ${names}</div>`;
     }
 
-    // 6. ASSEMBLE HTML
+    // 7. ASSEMBLE HTML
     const li = document.createElement('li');
     li.className = `match-row ${matchClass}`;
     const borderColor = matchClass === 'win' ? '#00ff64' : matchClass === 'loss' ? '#ff4655' : '#aaaaaa';
