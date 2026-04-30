@@ -258,6 +258,7 @@ func main() {
 
 		// 4. RNG Logic (Using math/rand)
 		roll := rand.Float64()
+		fmt.Println(roll)
 		var targetRarity string
 		// THE TWEAKED ODDS: 0.4% for Radiant
 		if roll < 0.004 {         // 0.4% chance (About 1 in 250 packs)
