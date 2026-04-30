@@ -249,7 +249,7 @@ func main() {
 		// 3. Database Column Sync: Use 'fredtokens'
 		var userTokens float64
 		err := DB.QueryRow("SELECT fredtokens FROM users WHERE discord_id = ?", currentUserID).Scan(&userTokens)
-		if err != nil || userTokens < 500 {
+		if err != nil || userTokens < 250 {
 			http.Error(w, `{"error": "insufficient funds"}`, http.StatusBadRequest)
 			return
 		}
@@ -257,11 +257,11 @@ func main() {
 		// 4. RNG Logic (Using math/rand)
 		roll := rand.Float64()
 		var targetRarity string
-		if roll < 0.002 { targetRarity = "radiant" 
-		} else if roll < 0.02 { targetRarity = "immortal" 
-		} else if roll < 0.08 { targetRarity = "ascendant" 
-		} else if roll < 0.20 { targetRarity = "diamond" 
-		} else if roll < 0.50 { targetRarity = "bronze" 
+		if roll < 0.01 { targetRarity = "radiant" 
+		} else if roll < 0.035 { targetRarity = "immortal" 
+		} else if roll < 0.115 { targetRarity = "ascendant" 
+		} else if roll < 0.260 { targetRarity = "diamond" 
+		} else if roll < 0.630 { targetRarity = "bronze" 
 		} else { targetRarity = "iron" }
 
 		// 5. Pull Card
@@ -276,7 +276,7 @@ func main() {
 
 		// 6. Transaction
 		tx, _ := DB.Begin()
-		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - 500 WHERE discord_id = ?", currentUserID)
+		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - 250 WHERE discord_id = ?", currentUserID)
 		if err != nil { tx.Rollback(); http.Error(w, `{"error": "db update failed"}`, 500); return }
 
 		_, err = tx.Exec(`
