@@ -26,6 +26,8 @@ var (
 	DB          *sql.DB 
 	oauthConfig *oauth2.Config
 	oauthState  = "fred-secure-state-token"
+
+	puuidCache sync.Map // Remembers Player PUUIDs so Riot doesn't rate-limit us
 )
 
 type PropMarket struct {
@@ -496,7 +498,7 @@ func main() {
 		var linkedPlayer string
 		err := DB.QueryRow("SELECT linked_player FROM users WHERE discord_id = ?", userID).Scan(&linkedPlayer)
 		if err != nil || linkedPlayer == "none" || linkedPlayer == "" {
-			http.Error(w, `{"error": "Your Discord is not linked to a Riot account. Ask an Admin!"}`, http.StatusBadRequest)
+			http.Error(w, `{"error": "Discord not linked! Press Shift+A to open the Admin Panel and link your account."}`, http.StatusBadRequest)
 			return
 		}
 
@@ -538,7 +540,48 @@ func main() {
 		if req.Difficulty == "medium" { activeQuest = todaysMed }
 		if req.Difficulty == "hard" { activeQuest = todaysHard }
 
-		// 5. READ THE LOCAL CACHE (No slow API calls!)
+		// --- 5. THE CENSORSHIP BYPASS (PUUID LOOKUP CACHE) ---
+		roster := []struct{ Name, Tag string }{
+			{"TheMisterED", "0007"}, {"Heri", "BLUB"}, {"hhj", "8769"},
+			{"Djibはコリーヌ お あいして", "LOVE"}, {"Graussbyt", "5629"},
+			{"Lal6s9gne", "6641"}, {"XTrixツ", "DREAM"}, {"小胖子vincent", "4397"},
+		}
+
+		var playerTag string
+		for _, r := range roster {
+			if strings.EqualFold(r.Name, linkedPlayer) {
+				playerTag = r.Tag
+				break
+			}
+		}
+
+		cacheKey := strings.ToLower(linkedPlayer + "#" + playerTag)
+		targetPuuid := ""
+		
+		// Check Memory Cache first so Riot doesn't block us!
+		if val, ok := puuidCache.Load(cacheKey); ok {
+			targetPuuid = val.(string)
+		} else {
+			accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(linkedPlayer), url.PathEscape(playerTag))
+			reqAcc, _ := http.NewRequest("GET", accountURL, nil)
+			if apiKey != "" { reqAcc.Header.Set("Authorization", apiKey) }
+			respAcc, errAcc := http.DefaultClient.Do(reqAcc)
+			if errAcc == nil && respAcc.StatusCode == 200 {
+				var accData struct { Data struct { Puuid string `json:"puuid"` } `json:"data"` }
+				json.NewDecoder(respAcc.Body).Decode(&accData)
+				targetPuuid = accData.Data.Puuid
+				puuidCache.Store(cacheKey, targetPuuid) // Save it for next time!
+				respAcc.Body.Close()
+			}
+		}
+
+		if targetPuuid == "" {
+			http.Error(w, `{"error": "Riot API is currently overloaded. Please try verifying again in 60 seconds."}`, http.StatusInternalServerError)
+			return
+		}
+		// -----------------------------------------------------
+
+		// 6. READ THE LOCAL CACHE (No slow API calls!)
 		cacheMutex.RLock()
 		dataBytes := cachedMatchesData
 		cacheMutex.RUnlock()
@@ -556,7 +599,7 @@ func main() {
 		totalAssists, totalDamage, totalHeadshots, totalKills, totalRoundsWon, totalScore, totalRoundsPlayed := 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0
 		lethalForce, positiveImpact, hardCarry, flawlessVictory, combatMedic := false, false, false, false, false
 
-		// 6. SCAN MATCHES
+		// 7. SCAN MATCHES
 		for _, m := range cacheData.Data {
 			meta, _ := m.Match["metadata"].(map[string]interface{})
 			
@@ -569,10 +612,9 @@ func main() {
 
 			// ONLY count matches played AFTER 2:00 AM today!
 			if matchTime < float64(resetTime.Unix()) {
-				continue // Cached matches are sorted newest first, but we continue just to be safe
+				continue 
 			}
 
-			// Find our player in the match
 			var allPlayers []interface{}
 			if pMap, ok := m.Match["players"].(map[string]interface{}); ok { allPlayers, _ = pMap["all_players"].([]interface{})
 			} else if pArr, ok := m.Match["players"].([]interface{}); ok { allPlayers = pArr }
@@ -581,8 +623,9 @@ func main() {
 				playerMap, ok := p.(map[string]interface{})
 				if !ok { continue }
 
-				name, _ := playerMap["name"].(string)
-				if strings.EqualFold(name, linkedPlayer) {
+				puuid, _ := playerMap["puuid"].(string)
+				
+				if strings.EqualFold(puuid, targetPuuid) {
 					totalMatches++
 					stats, _ := playerMap["stats"].(map[string]interface{})
 					
@@ -593,69 +636,105 @@ func main() {
 					hs, _ := stats["headshots"].(float64)
 					score, _ := stats["score"].(float64)
 
+					// --- THE FIX: Look for team_id first, then fallback to team ---
+					myTeamName, _ := playerMap["team_id"].(string)
+					if myTeamName == "" {
+						myTeamName, _ = playerMap["team"].(string)
+					}
+					// --------------------------------------------------------------
+
+					myRoundsWon, enemyRoundsWon := 0.0, 0.0
+					
+					// --- THE V3 vs V4 FIX: Handle both Array and Map API formats! ---
+					if teamsArr, ok := m.Match["teams"].([]interface{}); ok {
+						// Newer V4 API Format (Array)
+						for _, t := range teamsArr {
+							tData, _ := t.(map[string]interface{})
+							tID, _ := tData["team_id"].(string)
+							rWon, _ := tData["rounds_won"].(float64)
+							if strings.EqualFold(tID, myTeamName) { 
+								myRoundsWon = rWon 
+							} else { 
+								enemyRoundsWon = rWon 
+							}
+						}
+					} else if teamsMap, ok := m.Match["teams"].(map[string]interface{}); ok {
+						// Older V3 API Format (Object/Map)
+						if redTeam, ok := teamsMap["red"].(map[string]interface{}); ok {
+							if blueTeam, ok := teamsMap["blue"].(map[string]interface{}); ok {
+								redRounds, _ := redTeam["rounds_won"].(float64)
+								blueRounds, _ := blueTeam["rounds_won"].(float64)
+
+								if strings.EqualFold(myTeamName, "Red") {
+									myRoundsWon = redRounds
+									enemyRoundsWon = blueRounds
+								} else {
+									myRoundsWon = blueRounds
+									enemyRoundsWon = redRounds
+								}
+							}
+						}
+					}
+					// ----------------------------------------------------------------
+					
+					// --- THE TRIPWIRES: Print the exact math to the console ---
+					log.Printf("[DEBUG] Match Found! PUUID: %s", puuid)
+					log.Printf("[DEBUG] K/D/A: %.0f/%.0f/%.0f | Team: %s", k, d, a, myTeamName)
+					log.Printf("[DEBUG] Score: My Team %.0f - %.0f Enemy Team", myRoundsWon, enemyRoundsWon)
+					// ----------------------------------------------------------
+					
 					totalKills += k
 					totalAssists += a
 					totalDamage += dmg
 					totalHeadshots += hs
 					totalScore += score
 
-					// Calculate Rounds Played & Won
-					myTeamName, _ := playerMap["team"].(string)
-					myRoundsWon, enemyRoundsWon := 0.0, 0.0
-					
-					if teamsArr, ok := m.Match["teams"].([]interface{}); ok {
-						for _, t := range teamsArr {
-							tData, _ := t.(map[string]interface{})
-							tID, _ := tData["team_id"].(string)
-							rWon, _ := tData["rounds_won"].(float64)
-							if strings.EqualFold(tID, myTeamName) { myRoundsWon = rWon } else { enemyRoundsWon = rWon }
-						}
-					}
-					
 					totalRoundsWon += myRoundsWon
 					roundsPlayed := myRoundsWon + enemyRoundsWon
 					totalRoundsPlayed += roundsPlayed
 
-					// Single Match Checks
 					if k >= 15 { lethalForce = true }
 					if k >= 25 { hardCarry = true }
-					if d == 0 { d = 1 } // Prevent divide by zero
+					if d == 0 { d = 1 } 
 					if (k / d) > 1.0 { positiveImpact = true }
 					if (myRoundsWon - enemyRoundsWon) >= 5 { flawlessVictory = true }
 					if a >= 10 && (roundsPlayed - d) >= 10 { combatMedic = true }
 					
-					break // Found the player, move to next match
+					break 
 				}
 			}
+			
 		}
 
-		// 7. EVALUATE THE QUEST
+		// 8. EVALUATE THE QUEST
 		passed := false
 		progressMsg := ""
 
 		switch activeQuest.Title {
-		case "Warmup Routine": passed = totalMatches >= 2; progressMsg = fmt.Sprintf("%d/2 Matches", totalMatches)
-		case "Supporting Cast": passed = totalAssists >= 15; progressMsg = fmt.Sprintf("%.0f/15 Assists", totalAssists)
-		case "Chip Damage": passed = totalDamage >= 2500; progressMsg = fmt.Sprintf("%.0f/2500 Damage", totalDamage)
+		case "Warmup Routine": passed = totalMatches >= 2; progressMsg = fmt.Sprintf("%d/2 Matches Played Today", totalMatches)
+		case "Supporting Cast": passed = totalAssists >= 15; progressMsg = fmt.Sprintf("%.0f/15 Assists Today", totalAssists)
+		case "Chip Damage": passed = totalDamage >= 2500; progressMsg = fmt.Sprintf("%.0f/2500 Damage Today", totalDamage)
 		case "Consistent": 
 			acs := 0.0
 			if totalRoundsPlayed > 0 { acs = totalScore / totalRoundsPlayed }
-			passed = acs >= 150; progressMsg = fmt.Sprintf("Current ACS: %.0f", acs)
+			passed = acs >= 150; progressMsg = fmt.Sprintf("Current ACS: %.0f (Need 150)", acs)
 		
-		case "Clicking Heads": passed = totalHeadshots >= 20; progressMsg = fmt.Sprintf("%.0f/20 Headshots", totalHeadshots)
-		case "Lethal Force": passed = lethalForce; progressMsg = "Requires 15+ kills in one match."
-		case "Securing the Bag": passed = totalRoundsWon >= 15; progressMsg = fmt.Sprintf("%.0f/15 Rounds Won", totalRoundsWon)
-		case "Positive Impact": passed = positiveImpact; progressMsg = "Requires a >1.0 KD in a match."
+		case "Clicking Heads": passed = totalHeadshots >= 20; progressMsg = fmt.Sprintf("%.0f/20 Headshots Today", totalHeadshots)
+		case "Lethal Force": passed = lethalForce; progressMsg = "Requires 15+ kills in one match today."
+		case "Securing the Bag": passed = totalRoundsWon >= 15; progressMsg = fmt.Sprintf("%.0f/15 Rounds Won Today", totalRoundsWon)
+		case "Positive Impact": passed = positiveImpact; progressMsg = "Requires a >1.0 KD in a match today."
 
-		case "Hard Carry": passed = hardCarry; progressMsg = "Requires 25+ kills in one match."
-		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 5+ rounds."
-		case "Combat Medic": passed = combatMedic; progressMsg = "Requires 10 assists & 10 rounds survived."
-		case "Top Fragger": passed = totalKills >= 50; progressMsg = fmt.Sprintf("%.0f/50 Kills", totalKills)
+		case "Hard Carry": passed = hardCarry; progressMsg = "Requires 25+ kills in one match today."
+		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 5+ rounds today."
+		case "Combat Medic": passed = combatMedic; progressMsg = "Requires 10 assists & 10 rounds survived today."
+		case "Top Fragger": passed = totalKills >= 50; progressMsg = fmt.Sprintf("%.0f/50 Kills Today", totalKills)
 		}
 
-		// 8. PAYOUT OR REJECT
+			// 9. PAYOUT OR REJECT
 		if !passed {
-			http.Error(w, fmt.Sprintf(`{"error": "Mission not complete. %s"}`, progressMsg), http.StatusBadRequest)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"error": "Mission not complete. %s"}`, progressMsg)
 			return
 		}
 
@@ -1385,6 +1464,44 @@ func main() {
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
+		// --- NEW: THE CENSORSHIP BYPASS (PUUID LOOKUP) ---
+		roster := []struct{ Name, Tag string }{
+			{"TheMisterED", "0007"},
+			{"Heri", "BLUB"},
+			{"hhj", "8769"},
+			{"Djibはコリーヌ お あいして", "LOVE"},
+			{"Graussbyt", "5629"},
+			{"Lal6s9gne", "6641"},
+			{"XTrixツ", "DREAM"},
+			{"小胖子vincent", "4397"},
+		}
+		
+		var playerTag string
+		for _, r := range roster {
+			if strings.EqualFold(r.Name, req.Player) {
+				playerTag = r.Tag
+				break
+			}
+		}
+
+		accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(req.Player), url.PathEscape(playerTag))
+		reqAcc, _ := http.NewRequest("GET", accountURL, nil)
+		if apiKey != "" { reqAcc.Header.Set("Authorization", apiKey) }
+		
+		respAcc, errAcc := http.DefaultClient.Do(reqAcc)
+		var targetPuuid string
+		if errAcc == nil && respAcc.StatusCode == 200 {
+			var accData struct { Data struct { Puuid string `json:"puuid"` } `json:"data"` }
+			json.NewDecoder(respAcc.Body).Decode(&accData)
+			targetPuuid = accData.Data.Puuid
+			respAcc.Body.Close()
+		}
+
+		if targetPuuid == "" {
+			http.Error(w, `{"error": "Failed to look up player PUUID for preview."}`, http.StatusBadRequest)
+			return
+		}
+
 		cacheMutex.RLock()
 		dataBytes := cachedMatchesData
 		cacheMutex.RUnlock()
@@ -1419,8 +1536,9 @@ func main() {
 				playerMap, ok := p.(map[string]interface{})
 				if !ok { continue }
 				
-				name, _ := playerMap["name"].(string)
-				if strings.EqualFold(name, req.Player) {
+				// --- CHANGED: Check PUUID instead of Name! ---
+				puuid, _ := playerMap["puuid"].(string)
+				if strings.EqualFold(puuid, targetPuuid) {
 					if req.PropType == "match_result" {
 						totalMatches++
 						teamName, _ := playerMap["team"].(string)

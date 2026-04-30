@@ -683,7 +683,6 @@ function initMatchFilters(body, matchList, statusEl, apiBase) {
 }
 
 // --- MATCH UI RENDERER (FINAL RR FIX) ---
-// --- MATCH UI RENDERER (FINAL RR FIX) ---
 function renderRosterMatchRow(entry, selectedSet) {
     const matchData = entry.match || {};
     const meta = matchData.metadata || {};
@@ -752,6 +751,20 @@ function renderRosterMatchRow(entry, selectedSet) {
         } else {
             score = `<span style="color: #aaaaaa">${blueRounds} - ${redRounds}</span>`;
         }
+    }
+
+    //4.5 Get stats
+    const myStats = getPlayerStats(matchData, targetFred.puuid); // Assuming you added puuid to targetFred!
+
+    let statsHTML = "";
+    if (myStats) {
+        statsHTML = `
+<div style="color: #aaaaaa; font-size: 0.85rem; font-family: 'Orbitron', sans-serif;">
+<span style="color: white; font-weight: bold;">${myStats.kda}</span> KDA 
+<span style="margin: 0 8px;">|</span> 
+<span style="color: white; font-weight: bold;">${myStats.acs}</span> ACS
+</div>
+`;
     }
 
     // 5. BUILD THE RR DISPLAY
@@ -1783,3 +1796,37 @@ window.verifyQuest = async function(difficulty) {
 
 // Run it when the page loads!
 document.addEventListener('DOMContentLoaded', loadDailyMissions);
+
+function getPlayerStats(match, playerPuuid) {
+    // 1. Find the player using their uncensored PUUID instead of their name
+    let players = match && match.players;
+    if (players && !Array.isArray(players) && players.all_players) {
+        players = players.all_players;
+    }
+    if (!Array.isArray(players)) return null;
+    
+    const me = players.find(p => p && p.puuid === playerPuuid);
+    if (!me || !me.stats) return null;
+
+    // 2. Extract Kills, Deaths, and Assists
+    const kills = me.stats.kills;
+    const deaths = me.stats.deaths;
+    const assists = me.stats.assists;
+
+    // 3. Calculate Average Combat Score (ACS)
+    // The API gives us total score, so we divide by total rounds played
+    const totalScore = me.stats.score;
+    const roundsPlayed = match.metadata.rounds_played;
+    let acs = 0;
+    
+    if (roundsPlayed > 0) {
+        acs = Math.round(totalScore / roundsPlayed);
+    }
+
+    // Return it as a neat object to use in your HTML
+    return {
+        kda: `${kills}/${deaths}/${assists}`,
+        acs: acs,
+        kdRatio: deaths === 0 ? kills : (kills / deaths).toFixed(2)
+    };
+}
