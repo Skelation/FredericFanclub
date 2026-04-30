@@ -259,14 +259,22 @@ func main() {
 		// 4. RNG Logic (Using math/rand)
 		roll := rand.Float64()
 		var targetRarity string
-		if roll < 0.01 { targetRarity = "radiant" 
-		} else if roll < 0.035 { targetRarity = "immortal" 
-		} else if roll < 0.115 { targetRarity = "ascendant" 
-		} else if roll < 0.260 { targetRarity = "diamond" 
-		} else if roll < 0.630 { targetRarity = "bronze" 
-		} else { targetRarity = "iron" }
+		// THE TWEAKED ODDS: 0.4% for Radiant
+		if roll < 0.004 {         // 0.4% chance (About 1 in 250 packs)
+			targetRarity = "radiant" 
+		} else if roll < 0.015 {  // 1.1% chance (0.015 - 0.004)
+			targetRarity = "immortal" 
+		} else if roll < 0.050 {  // 3.5% chance
+			targetRarity = "ascendant" 
+		} else if roll < 0.150 {  // 10.0% chance
+			targetRarity = "diamond" 
+		} else if roll < 0.500 {  // 35.0% chance
+			targetRarity = "bronze" 
+		} else {                  // 50.0% chance
+			targetRarity = "iron" 
+		}
 
-		// 5. Pull Card
+				// 5. Pull Card
 		var cardID int
 		var cardName, cardRarity, cardImage string
 		err = DB.QueryRow("SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? ORDER BY RANDOM() LIMIT 1", targetRarity).Scan(&cardID, &cardName, &cardRarity, &cardImage)
