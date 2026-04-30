@@ -1479,7 +1479,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) {
                 alert("Error: " + (data.error || "Could not open pack"));
                 btnOpenCase.disabled = false;
-                btnOpenCase.innerText = "Open Case (500 FT)";
+                btnOpenCase.innerText = "Open Case (250 FT)";
                 return;
             }
 
@@ -1568,7 +1568,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // C. Reset the button
                 btnOpenCase.disabled = false;
-                btnOpenCase.innerText = "Open Case (500 FT)";
+                btnOpenCase.innerText = "Open Case (250 FT)";
                 
                 if (typeof window.loadUserProfile === 'function') {
                     window.loadUserProfile();
@@ -1580,7 +1580,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("Failed to open case:", error);
             alert("Something went wrong with the server.");
             btnOpenCase.disabled = false;
-            btnOpenCase.innerText = "Open Case (500 FT)";
+            btnOpenCase.innerText = "Open Case (250 FT)";
         }
     });
 });
