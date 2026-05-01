@@ -125,6 +125,21 @@
                         <span style="color: #00ff64;">OVER: <span id="previewOver">1.00x</span></span>
                         <span style="color: #ff4655;">UNDER: <span id="previewUnder">1.00x</span></span>
                     </div>
+                        <!-- MULTI-VETO FOR GENERATED BETS -->
+                        <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); margin-top: 15px;">
+                            <div style="color: #ffaa00; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; margin-bottom: 8px;">MANUAL VETOES (Block from betting):</div>
+                            <div style="display: flex; flex-wrap: wrap; gap: 10px; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #ccc;" id="generatedVetoGrid">
+                                <label><input type="checkbox" value="ALL"> ENTIRE ROSTER</label>
+                                <label><input type="checkbox" value="Heri"> Heri</label>
+                                <label><input type="checkbox" value="TheMisterED"> ED</label>
+                                <label><input type="checkbox" value="hhj"> hhj</label>
+                                <label><input type="checkbox" value="Djibはコリーヌ お あいして"> Djib</label>
+                                <label><input type="checkbox" value="Graussbyt"> Graussbyt</label>
+                                <label><input type="checkbox" value="Lal6s9gne"> Lal6s9gne</label>
+                                <label><input type="checkbox" value="XTrixツ"> XTrix</label>
+                                <label><input type="checkbox" value="小胖子vincent"> Vincent</label>
+                            </div>
+                        </div>
                     <button class="bet-btn" onclick="publishPropBet()" style="width: 100%; margin-top: 1rem; background: #00ff88; color: black;">OPEN MARKET TO PUBLIC</button>
                     </div>
                     <div style="margin-top: 1rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
@@ -139,7 +154,46 @@
 
                         <button class="bet-btn" onclick="cancelEntireMarket()" style="width: 100%; background: transparent; border: 1px solid #ff4655; color: #ff4655;">🚨 ABORT MARKET & REFUND ALL 🚨</button>
                     </div>
-                    <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <!-- EXISTING: adminPreviewBox -->
+                <div id="adminPreviewBox" style="display: none; background: rgba(0,0,0,0.5); padding: 1rem; border-radius: 8px; margin-bottom: 1rem; border: 1px solid rgba(255,255,255,0.2);">
+                    <!-- ... existing preview stuff ... -->
+                </div>
+
+                    <!-- CUSTOM MARKET CREATOR -->
+                <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <h4 style="color: #ffaa00; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">MANUAL / CUSTOM MARKET</h4>
+                    <p style="text-align: center; color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 1rem;">Create custom bets. Set the exact odds and choose who is blocked from betting.</p>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                        <input type="text" id="customTargetName" class="bet-input" placeholder="Target Player(s) (e.g. ED & Heri)" style="flex: 1;">
+                        <input type="text" id="customPropName" class="bet-input" placeholder="Bet Name (e.g. Combined Kills)" style="flex: 1;">
+                    </div>
+
+                    <!-- MULTI-VETO FOR CUSTOM BETS -->
+                    <div style="background: rgba(0,0,0,0.3); padding: 10px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); margin-bottom: 1rem;">
+                        <div style="color: #ffaa00; font-family: 'Orbitron', sans-serif; font-size: 0.8rem; margin-bottom: 8px;">VETO PLAYERS (Block from betting):</div>
+                        <div style="display: flex; flex-wrap: wrap; gap: 10px; font-family: 'Rajdhani', sans-serif; font-size: 0.9rem; color: #ccc;" id="customVetoGrid">
+                            <label><input type="checkbox" value="ALL"> ENTIRE ROSTER</label>
+                            <label><input type="checkbox" value="Heri"> Heri</label>
+                            <label><input type="checkbox" value="TheMisterED"> ED</label>
+                            <label><input type="checkbox" value="hhj"> hhj</label>
+                            <label><input type="checkbox" value="Djibはコリーヌ お あいして"> Djib</label>
+                            <label><input type="checkbox" value="Graussbyt"> Graussbyt</label>
+                            <label><input type="checkbox" value="Lal6s9gne"> Lal6s9gne</label>
+                            <label><input type="checkbox" value="XTrixツ"> XTrix</label>
+                            <label><input type="checkbox" value="小胖子vincent"> Vincent</label>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+                        <input type="number" id="customLine" class="bet-input" placeholder="Line (e.g. 0.5)" step="0.5" style="flex: 1;">
+                        <input type="number" id="customOver" class="bet-input" placeholder="Over Odds (e.g. 3.5)" step="0.1" style="flex: 1;">
+                        <input type="number" id="customUnder" class="bet-input" placeholder="Under Odds (e.g. 1.2)" step="0.1" style="flex: 1;">
+                    </div>
+                    
+                    <button class="bet-btn" onclick="publishCustomMarket()" style="width: 100%; background: #ffaa00; color: black;">PUBLISH CUSTOM MARKET</button>
+                </div>
+                                    <div style="margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid rgba(255,255,255,0.1);">
                 <h4 style="color: white; text-align: center; margin-bottom: 1rem; font-family: 'Orbitron', sans-serif;">ROSTER MANAGEMENT</h4>
                 
                 <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
@@ -178,6 +232,6 @@
         </div>
     </footer>
 
-    <script src="js/site.js?v=ws1"></script>
+    <script src="js/site.js?v=custom"></script>
 </body>
 </html>

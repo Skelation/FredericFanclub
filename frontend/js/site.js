@@ -1830,3 +1830,92 @@ function getPlayerStats(match, playerPuuid) {
         kdRatio: deaths === 0 ? kills : (kills / deaths).toFixed(2)
     };
 }
+
+window.publishPropBet = async function() {
+    if (!pendingPreview) return;
+    const token = document.getElementById('adminTokenInput').value;
+    const apiBase = getApiBase();
+
+    // NEW: Grab all checked vetoes from the grid!
+    const vetoes = Array.from(document.querySelectorAll('#generatedVetoGrid input:checked')).map(cb => cb.value);
+    pendingPreview.vetoes = vetoes;
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/publish-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(pendingPreview)
+        });
+        
+        if (res.ok) {
+            document.getElementById('adminMessage').style.color = "#00ff64";
+            document.getElementById('adminMessage').textContent = "MARKET PUBLISHED! The fans can now bet.";
+            
+            // Clear the checkboxes for next time
+            document.querySelectorAll('#generatedVetoGrid input:checked').forEach(cb => cb.checked = false);
+            loadBettingMarket();
+        }
+    } catch (e) {
+        document.getElementById('adminMessage').style.color = "#ff4655";
+        document.getElementById('adminMessage').textContent = "Failed to publish.";
+    }
+};
+
+window.publishCustomMarket = async function() {
+    const token = document.getElementById('adminTokenInput').value;
+    const msgEl = document.getElementById('adminMessage');
+    const apiBase = getApiBase();
+
+    const targetName = document.getElementById('customTargetName').value;
+    const propName = document.getElementById('customPropName').value;
+    const line = parseFloat(document.getElementById('customLine').value) || 0.5;
+    const overMult = parseFloat(document.getElementById('customOver').value) || 1.5;
+    const underMult = parseFloat(document.getElementById('customUnder').value) || 1.5;
+
+    // NEW: Grab all checked vetoes from the custom grid!
+    const vetoes = Array.from(document.querySelectorAll('#customVetoGrid input:checked')).map(cb => cb.value);
+
+    if (!targetName || !propName) {
+        msgEl.style.color = "#ff4655";
+        msgEl.textContent = "Please enter a Target Player and Bet Name.";
+        return;
+    }
+
+    const customMarket = {
+        player: targetName,
+        prop_type: propName,
+        line: line,
+        over_multiplier: overMult,
+        under_multiplier: underMult,
+        is_open: true,
+        vetoes: vetoes // Ship the array to Go!
+    };
+
+    try {
+        const res = await fetch(`${apiBase}/api/admin/publish-prop`, {
+            method: 'POST',
+            headers: { 'X-Admin-Token': token, 'Content-Type': 'application/json' },
+            body: JSON.stringify(customMarket)
+        });
+        
+        if (res.ok) {
+            msgEl.style.color = "#ffaa00";
+            msgEl.textContent = "CUSTOM MARKET PUBLISHED! The fans can now bet.";
+            
+            // Clear all inputs
+            document.getElementById('customTargetName').value = '';
+            document.getElementById('customPropName').value = '';
+            document.getElementById('customOver').value = '';
+            document.getElementById('customUnder').value = '';
+            document.querySelectorAll('#customVetoGrid input:checked').forEach(cb => cb.checked = false);
+            
+            loadBettingMarket();
+        } else {
+            msgEl.style.color = "#ff4655";
+            msgEl.textContent = "Failed to publish custom market.";
+        }
+    } catch (e) {
+        msgEl.style.color = "#ff4655";
+        msgEl.textContent = "Network error.";
+    }
+};

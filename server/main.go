@@ -31,12 +31,13 @@ var (
 )
 
 type PropMarket struct {
-	Player       string  `json:"player"`
-	PropType     string  `json:"prop_type"` // "kills" or "deaths"
-	Line         float64 `json:"line"`      // e.g., 14.5
-	OverMult     float64 `json:"over_multiplier"`
-	UnderMult    float64 `json:"under_multiplier"`
-	IsOpen       bool    `json:"is_open"`
+	Player       string   `json:"player"`
+	PropType     string   `json:"prop_type"` 
+	Line         float64  `json:"line"`      
+	OverMult     float64  `json:"over_multiplier"`
+	UnderMult    float64  `json:"under_multiplier"`
+	IsOpen       bool     `json:"is_open"`
+	Vetoes       []string `json:"vetoes"` // <--- NEW: Array of banned players
 }
 
 type WSMessage struct {
@@ -1267,20 +1268,23 @@ func main() {
 
 		// --- ANTI-CORRUPTION ENGINE ---
 		if linkedPlayer != "none" {
-			// Rule 1: Cannot bet on yourself
+			// Rule 1: Check if they are in the custom Veto List!
+			for _, vetoedPlayer := range CurrentMarket.Vetoes {
+				if strings.EqualFold(linkedPlayer, vetoedPlayer) || vetoedPlayer == "ALL" {
+					tx.Rollback()
+					http.Error(w, `{"error": "Conflict of Interest: You are vetoed from betting on this market!"}`, http.StatusForbidden)
+					return
+				}
+			}
+
+			// Rule 2: Keep the auto-blocker just in case
 			if strings.EqualFold(linkedPlayer, CurrentMarket.Player) {
 				tx.Rollback()
 				http.Error(w, `{"error": "Conflict of Interest: You cannot bet on your own performance!"}`, http.StatusForbidden)
 				return
 			}
-			// Rule 2: Roster players cannot bet on Team Matches
-			if CurrentMarket.Player == "FRED ESPORTS" {
-				tx.Rollback()
-				http.Error(w, `{"error": "Conflict of Interest: Roster players cannot bet on team matches!"}`, http.StatusForbidden)
-				return
-			}
 		}
-
+		
 		// --- EXECUTE THE BET ---
 		// 1. Deduct Tokens
 		_, err = tx.Exec("UPDATE users SET fredtokens = fredtokens - ? WHERE discord_id = ?", req.Amount, discordID)
@@ -1467,7 +1471,7 @@ func main() {
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
-		// --- NEW: THE CENSORSHIP BYPASS (PUUID LOOKUP) ---
+		// --- THE CENSORSHIP BYPASS (DYNAMIC PUUID CACHE) ---
 		roster := []struct{ Name, Tag string }{
 			{"TheMisterED", "0007"},
 			{"Heri", "BLUB"},
@@ -1487,23 +1491,37 @@ func main() {
 			}
 		}
 
-		accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(req.Player), url.PathEscape(playerTag))
-		reqAcc, _ := http.NewRequest("GET", accountURL, nil)
-		if apiKey != "" { reqAcc.Header.Set("Authorization", apiKey) }
+		cacheKey := strings.ToLower(req.Player + "#" + playerTag)
+		targetPuuid := ""
 		
-		respAcc, errAcc := http.DefaultClient.Do(reqAcc)
-		var targetPuuid string
-		if errAcc == nil && respAcc.StatusCode == 200 {
-			var accData struct { Data struct { Puuid string `json:"puuid"` } `json:"data"` }
-			json.NewDecoder(respAcc.Body).Decode(&accData)
-			targetPuuid = accData.Data.Puuid
-			respAcc.Body.Close()
+		// 1. Check Memory Cache first! (0 API calls if found)
+		if val, ok := puuidCache.Load(cacheKey); ok {
+			targetPuuid = val.(string)
+		} else {
+			// 2. If not in memory, ask HenrikDev's API
+			accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(req.Player), url.PathEscape(playerTag))
+			reqAcc, _ := http.NewRequest("GET", accountURL, nil)
+			if apiKey != "" { reqAcc.Header.Set("Authorization", apiKey) }
+			
+			respAcc, errAcc := http.DefaultClient.Do(reqAcc)
+			if errAcc == nil && respAcc.StatusCode == 200 {
+				var accData struct { Data struct { Puuid string `json:"puuid"` } `json:"data"` }
+				json.NewDecoder(respAcc.Body).Decode(&accData)
+				targetPuuid = accData.Data.Puuid
+				
+				// 3. Save it to RAM so we never have to ask the API for this player again!
+				if targetPuuid != "" {
+					puuidCache.Store(cacheKey, targetPuuid) 
+				}
+				respAcc.Body.Close()
+			}
 		}
 
 		if targetPuuid == "" {
 			http.Error(w, `{"error": "Failed to look up player PUUID for preview."}`, http.StatusBadRequest)
 			return
 		}
+		// ---------------------------------------------------
 
 		cacheMutex.RLock()
 		dataBytes := cachedMatchesData
