@@ -550,42 +550,30 @@ func main() {
 		if req.Difficulty == "hard" { activeQuest = todaysHard }
 
 		// --- 5. THE CENSORSHIP BYPASS (PUUID LOOKUP CACHE) ---
-		roster := []struct{ Name, Tag string }{
-			{"TheMisterED", "0007"}, {"Heri", "BLUB"}, {"hhj", "8769"},
-			{"Djibはコリーヌ お あいして", "LOVE"}, {"Graussbyt", "5629"},
-			{"Lal6s9gne", "6641"}, {"XTrixツ", "DREAM"}, {"小胖子vincent", "4397"},
-		}
-
-		var playerTag string
-		for _, r := range roster {
-			if strings.EqualFold(r.Name, linkedPlayer) {
-				playerTag = r.Tag
-				break
-			}
-		}
-
-		cacheKey := strings.ToLower(linkedPlayer + "#" + playerTag)
 		targetPuuid := ""
-		
-		// Check Memory Cache first so Riot doesn't block us!
-		if val, ok := puuidCache.Load(cacheKey); ok {
-			targetPuuid = val.(string)
-		} else {
-			accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(linkedPlayer), url.PathEscape(playerTag))
-			reqAcc, _ := http.NewRequest("GET", accountURL, nil)
-			if apiKey != "" { reqAcc.Header.Set("Authorization", apiKey) }
-			respAcc, errAcc := http.DefaultClient.Do(reqAcc)
-			if errAcc == nil && respAcc.StatusCode == 200 {
-				var accData struct { Data struct { Puuid string `json:"puuid"` } `json:"data"` }
-				json.NewDecoder(respAcc.Body).Decode(&accData)
-				targetPuuid = accData.Data.Puuid
-				puuidCache.Store(cacheKey, targetPuuid) // Save it for next time!
-				respAcc.Body.Close()
-			}
+		switch strings.ToLower(linkedPlayer) {
+		case "themistered": 
+			targetPuuid = "be655b44-568d-521c-a1b3-bbdee59dcc56"
+		case "heri": 
+			targetPuuid = "381185ae-9f51-55b9-951a-215949c35e02"
+		case "hhj": 
+			targetPuuid = "e1908072-8690-5298-a41c-c0eecb154bfd"
+		case "djibはコリーヌ お あいして": 
+			targetPuuid = "00b75608-fd12-57c2-a4cf-23466ff42c71"
+		case "graussbyt": 
+			targetPuuid = "8adc42f1-6806-5036-9a3e-94c07349851d"
+		case "lal6s9gne": 
+			targetPuuid = "97d7be3c-67c4-5d9d-9a1d-c382774cba20"
+		case "xtrixツ": 
+			targetPuuid = "7f94422d-6397-5d35-b21c-da98e467f339"
+		case "小胖子vincent": 
+			targetPuuid = "e0454220-fc45-5447-82a4-a6e94d326738"
 		}
 
 		if targetPuuid == "" {
-			http.Error(w, `{"error": "Riot API is currently overloaded. Please try verifying again in 60 seconds."}`, http.StatusInternalServerError)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprintf(w, `{"error": "Could not identify your linked player. Check the roster names."}`)
 			return
 		}
 		// -----------------------------------------------------
@@ -641,9 +629,15 @@ func main() {
 					k, _ := stats["kills"].(float64)
 					d, _ := stats["deaths"].(float64)
 					a, _ := stats["assists"].(float64)
-					dmg, _ := stats["damage"].(float64)
 					hs, _ := stats["headshots"].(float64)
 					score, _ := stats["score"].(float64)
+
+					// --- THE REAL DAMAGE FIX ---
+					// Damage is sitting outside of "stats", right on the main player map!
+					var dmg float64
+					if dVal, ok := playerMap["damage_made"].(float64); ok {
+						dmg = dVal
+					}
 
 					// --- THE FIX: Look for team_id first, then fallback to team ---
 					myTeamName, _ := playerMap["team_id"].(string)
