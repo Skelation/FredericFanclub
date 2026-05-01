@@ -558,15 +558,15 @@ func main() {
 			targetPuuid = "381185ae-9f51-55b9-951a-215949c35e02"
 		case "hhj": 
 			targetPuuid = "e1908072-8690-5298-a41c-c0eecb154bfd"
-		case "djibはコリーヌ お あいして": 
+		case "djibはコリーヌ お あいして", "djib":
 			targetPuuid = "00b75608-fd12-57c2-a4cf-23466ff42c71"
 		case "graussbyt": 
 			targetPuuid = "8adc42f1-6806-5036-9a3e-94c07349851d"
 		case "lal6s9gne": 
 			targetPuuid = "97d7be3c-67c4-5d9d-9a1d-c382774cba20"
-		case "xtrixツ": 
+		case "xtrixツ", "xtrix": // <-- Added "xtrix"
 			targetPuuid = "7f94422d-6397-5d35-b21c-da98e467f339"
-		case "小胖子vincent": 
+		case "小胖子vincent", "vincent": 
 			targetPuuid = "e0454220-fc45-5447-82a4-a6e94d326738"
 		}
 
