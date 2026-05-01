@@ -701,7 +701,7 @@ func main() {
 					if k >= 25 { hardCarry = true }
 					if d == 0 { d = 1 } 
 					if (k / d) > 1.0 { positiveImpact = true }
-					if (myRoundsWon - enemyRoundsWon) >= 5 { flawlessVictory = true }
+					if (myRoundsWon - enemyRoundsWon) >= 6 { flawlessVictory = true }
 					if a >= 10 && (roundsPlayed - d) >= 10 { combatMedic = true }
 					
 					break 
@@ -723,13 +723,13 @@ func main() {
 			if totalRoundsPlayed > 0 { acs = totalScore / totalRoundsPlayed }
 			passed = acs >= 150; progressMsg = fmt.Sprintf("Current ACS: %.0f (Need 150)", acs)
 		
-		case "Clicking Heads": passed = totalHeadshots >= 20; progressMsg = fmt.Sprintf("%.0f/20 Headshots Today", totalHeadshots)
+		case "Clicking Heads": passed = totalHeadshots >= 15; progressMsg = fmt.Sprintf("%.0f/15 Headshots Today", totalHeadshots)
 		case "Lethal Force": passed = lethalForce; progressMsg = "Requires 15+ kills in one match today."
 		case "Securing the Bag": passed = totalRoundsWon >= 15; progressMsg = fmt.Sprintf("%.0f/15 Rounds Won Today", totalRoundsWon)
 		case "Positive Impact": passed = positiveImpact; progressMsg = "Requires a >1.0 KD in a match today."
 
 		case "Hard Carry": passed = hardCarry; progressMsg = "Requires 25+ kills in one match today."
-		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 5+ rounds today."
+		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 6+ rounds today."
 		case "Combat Medic": passed = combatMedic; progressMsg = "Requires 10 assists & 10 rounds survived today."
 		case "Top Fragger": passed = totalKills >= 50; progressMsg = fmt.Sprintf("%.0f/50 Kills Today", totalKills)
 		}
