@@ -19,6 +19,8 @@ import (
 	
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/gorilla/websocket"
+
+	"fredericfanclub/server/discordbot"
 )
 
 var (
@@ -1322,6 +1324,12 @@ func main() {
 		}
 		// --------------------------------
 
+		// --- NEW: FIRE DISCORD NOTIFICATION ---
+		// We wrap it in a goroutine (`go`) so it doesn't slow down the user's web request!
+		fmt.Println("SENDINBG NESSAGE")
+		go discordbot.SendBetNotification(linkedPlayer, req.Choice, int(req.Amount))
+		// ---------------------------------------
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "new_balance": %g}`, balance-req.Amount)
 	})
@@ -1738,6 +1746,7 @@ func main() {
 		CurrentMarket = &marketToPublish
 
 		broadcast <- WSMessage{Type: "market_published"}
+		go discordbot.SendMarketPublishedNotification(marketToPublish.Player, marketToPublish.PropType, marketToPublish.Line, marketToPublish.OverMult, marketToPublish.UnderMult)
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market is now LIVE!"}`)
 	})
@@ -1844,37 +1853,60 @@ func main() {
 			return
 		}
 
+		// Safeguard: Check if a market actually exists before wiping it
+		if CurrentMarket == nil {
+			http.Error(w, `{"error": "No active market to resolve"}`, http.StatusBadRequest)
+			return
+		}
+
+		// We must save the Market info here before we wipe CurrentMarket to nil!
+		marketPlayer := CurrentMarket.Player
+		marketProp := CurrentMarket.PropType
+
 		tx, err := DB.Begin()
 		if err != nil {
 			http.Error(w, `{"error": "server error"}`, http.StatusInternalServerError)
 			return
 		}
 
-		// Fetch all pending prop bets
-		rows, err := tx.Query("SELECT id, discord_id, choice, amount, locked_multiplier FROM bets WHERE status = 'pending' AND bet_category = 'prop'")
+		// UPGRADE: Join the 'users' table so we can fetch their Username for the Discord message!
+		rows, err := tx.Query(`
+			SELECT b.id, b.discord_id, b.choice, b.amount, b.locked_multiplier, u.username 
+			FROM bets b 
+			JOIN users u ON b.discord_id = u.discord_id 
+			WHERE b.status = 'pending' AND b.bet_category = 'prop'`)
+		
+		var winners []discordbot.BetResult
+		var losers []discordbot.BetResult
+
 		if err == nil {
 			type Bet struct {
-				ID      int
-				Discord string
-				Choice  string
-				Amount  float64
-				Mult    float64
+				ID       int
+				Discord  string
+				Choice   string
+				Amount   float64
+				Mult     float64
+				Username string
 			}
 			var bets []Bet
 			for rows.Next() {
 				var b Bet
-				rows.Scan(&b.ID, &b.Discord, &b.Choice, &b.Amount, &b.Mult)
+				rows.Scan(&b.ID, &b.Discord, &b.Choice, &b.Amount, &b.Mult, &b.Username)
 				bets = append(bets, b)
 			}
 			rows.Close()
 
-			// Pay out the winners!
+			// Pay out the winners and sort them into our Discord lists!
 			for _, b := range bets {
 				newStatus := "lost"
 				if b.Choice == req.Outcome {
 					newStatus = "won"
 					payout := b.Amount * b.Mult
 					tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", payout, b.Discord)
+					
+					winners = append(winners, discordbot.BetResult{Username: b.Username, Amount: b.Amount, Payout: payout})
+				} else {
+					losers = append(losers, discordbot.BetResult{Username: b.Username, Amount: b.Amount})
 				}
 				tx.Exec("UPDATE bets SET status = ? WHERE id = ?", newStatus, b.ID)
 			}
@@ -1885,6 +1917,11 @@ func main() {
 		tx.Commit()
 
 		broadcast <- WSMessage{Type: "market_resolved"}
+
+		// --- FIRE THE DISCORD NOTIFICATION ---
+		go discordbot.SendMarketResolvedNotification(marketPlayer, marketProp, req.Outcome, winners, losers)
+		// -------------------------------------
+
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market resolved as %s! Paid out winners."}`, strings.ToUpper(req.Outcome))
 	})
