@@ -24,23 +24,23 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 	anchorName := "Heri"
 	anchorTag := "BLUB"
 
-	// 1. Create the data/premier folder if it doesn't exist
-	os.MkdirAll("./data/premier", 0755)
+	// 1. Create our new Two-Tier folder structure
+	os.MkdirAll("./data/premier/archive", 0755) // THE VAULT (Fat files)
+	os.MkdirAll("./data/premier/lite", 0755)    // THE CACHE (UI files)
 
 	ticker := time.NewTicker(10 * time.Minute)
 
 	go func() {
-		// Run immediately on boot, then wait for ticker
 		for ; true; <-ticker.C {
 
-			// Create file path organized by month (e.g. "./data/premier/2026-05.json")
+			// We now read from the LITE file so we don't blow up our RAM on boot
 			monthStr := time.Now().Format("2006-01")
-			filePath := fmt.Sprintf("./data/premier/%s.json", monthStr)
+			liteFilePath := fmt.Sprintf("./data/premier/lite/lite_%s.json", monthStr)
 
 			premierMatches := make(map[string]map[string]interface{})
 
-			// 2. READ EXISTING DATA FROM DISK
-			existingFile, err := os.ReadFile(filePath)
+			// 2. READ EXISTING *LITE* DATA FROM DISK
+			existingFile, err := os.ReadFile(liteFilePath)
 			if err == nil {
 				var existing struct { Data []map[string]interface{} `json:"data"` }
 				if err := json.Unmarshal(existingFile, &existing); err == nil {
@@ -58,24 +58,20 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 
 			// 3. FETCH NEW DATA FROM RIOT API
 			reqURL := base + "/" + matchPath + "/eu"
-			if strings.Contains(matchPath, "v4/matches") {
-				reqURL += "/pc"
-			}
+			if strings.Contains(matchPath, "v4/matches") { reqURL += "/pc" }
 			reqURL += "/" + url.PathEscape(anchorName) + "/" + url.PathEscape(anchorTag) + "?mode=premier&size=5"
 
 			req, _ := http.NewRequest("GET", reqURL, nil)
 			if apiKey != "" { req.Header.Set("Authorization", apiKey) }
 			
 			resp, err := http.DefaultClient.Do(req)
-			
-			// Handle API Crashes
 			if err != nil {
 				log.Printf("❌ Premier Poller Network Error: %v", err)
 				if resp != nil { resp.Body.Close() }
 				continue
 			}
 			if resp.StatusCode != 200 {
-				log.Printf("❌ Premier API Rejected! Status: %d for URL: %s", resp.StatusCode, reqURL)
+				log.Printf("❌ Premier API Rejected! Status: %d", resp.StatusCode)
 				resp.Body.Close()
 				continue
 			}
@@ -84,23 +80,35 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 			json.NewDecoder(resp.Body).Decode(&result)
 			resp.Body.Close()
 
-			// 4. MERGE NEW MATCHES INTO EXISTING MATCHES
-			// Because we use the Match ID as the dictionary key, it naturally prevents duplicates!
+			// 4. THE TWO-TIER MERGE LOGIC
 			for _, m := range result.Data {
 				if meta, ok := m["metadata"].(map[string]interface{}); ok {
 					matchID, _ := meta["matchid"].(string)
 					if matchID == "" { matchID, _ = meta["match_id"].(string) }
 					if matchID != "" {
+						
+						// --- TIER 1: THE VAULT (Save full raw data permanently) ---
+						archivePath := fmt.Sprintf("./data/premier/archive/%s.json", matchID)
+						// Only write it to disk if we haven't saved this match before
+						if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+							fatBytes, _ := json.Marshal(m)
+							os.WriteFile(archivePath, fatBytes, 0644)
+						}
+
+						// --- TIER 2: THE CACHE (Strip it down for the RAM and Frontend) ---
+						delete(m, "rounds")
+						delete(m, "kills")
+						delete(m, "events")
+
+						// Add the lightweight version to our memory tracker
 						premierMatches[matchID] = m
 					}
 				}
 			}
 
-			// Convert our dictionary back into a clean array
+			// Convert memory map back into a clean array
 			var finalData []map[string]interface{}
-			for _, m := range premierMatches {
-				finalData = append(finalData, m)
-			}
+			for _, m := range premierMatches { finalData = append(finalData, m) }
 
 			// 5. SORT BY DATE (Newest First)
 			sort.Slice(finalData, func(i, j int) bool {
@@ -111,19 +119,24 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 				return timeI > timeJ
 			})
 
-			// 6. SAVE TO DISK AND MEMORY
+			// Keep memory clean: Only hold the last 100 matches in RAM
+			if len(finalData) > 30{
+				finalData = finalData[:30]
+			}
+
+			// 6. SAVE LITE VERSION TO DISK AND MEMORY
 			responseObj := map[string]interface{}{"data": finalData}
 			newBytes, _ := json.Marshal(responseObj)
 
-			// Write to the file
-			os.WriteFile(filePath, newBytes, 0644)
+			// Write the lightweight file so the server boots fast next time
+			os.WriteFile(liteFilePath, newBytes, 0644)
 
-			// Safely write to our global memory cache for the frontend
+			// Update the live website cache
 			premierMutex.Lock()
 			cachedPremierData = newBytes
 			premierMutex.Unlock()
 
-			log.Printf("Premier Poller: Updated %s with %d total matches", filePath, len(finalData))
+			log.Printf("Premier Poller: Tracked %d matches (Raw files secured in Vault)", len(finalData))
 		}
 	}()
 }

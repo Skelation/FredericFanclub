@@ -22,14 +22,13 @@ func SendBetNotification(username string, choice string, amount int) {
 	if choice == "under" || choice == "loss" { color = 0xff4655 } // Red for Under/Loss
 
 	embed := map[string]interface{}{
-		"title":       "🎰 NOUVEAU PARI LANCE!",
+		"title":       "🎰 NOUVELLE MISE!",
 		"color":       color,
 		"description": fmt.Sprintf("**%s** a mis **%d Freddy Tokens** sur **%s**!", username, amount, choice),
 		"footer":      map[string]interface{}{"text": "FRED"},
 	}
 
 	payload := map[string]interface{}{
-		"content": fmt.Sprintf("<@&%s>", AlertRoleID), // THE GUARANTEED ROLE PING!
 		"embeds":  []interface{}{embed},
 	}
 
@@ -55,8 +54,8 @@ func SendMarketPublishedNotification(player string, propType string, line float6
 	if propType == "match_result" { displayType = "MATCH WIN/LOSS" }
 
 	embed := map[string]interface{}{
-		"title":       "🚨 NOUVEAU BET OUVERT! fredericfan.club/betting 🚨",
-		"color":       0xffaa00, // Fred Gold!
+		"title":       "🚨 NOUVEAU BET OUVERT! 🚨",
+		"color":       0xffaa00, 
 		"description": fmt.Sprintf("Un nouveau market est apparu sur **%s**! allez sur fredericfan.club/betting pour mettre vos paris.", player),
 		"fields": []map[string]interface{}{
 			{
@@ -79,7 +78,7 @@ func SendMarketPublishedNotification(player string, propType string, line float6
 	}
 
 	payload := map[string]interface{}{
-		"content": fmt.Sprintf("<@&%s> Allez on parie !", AlertRoleID), // PING!
+		"content": fmt.Sprintf("<@&%s> Allez on parie ! fredericfan.club/betting", AlertRoleID), // PING!
 		"embeds":  []interface{}{embed},
 	}
 
@@ -146,7 +145,7 @@ func SendMarketResolvedNotification(player string, propType string, outcome stri
 	}
 
 	payload := map[string]interface{}{
-		"content": fmt.Sprintf("<@&%s> VERIFIEZ VOS COMPTES!", AlertRoleID),
+		"content": fmt.Sprintf("<@&%s> VERIFIEZ VOS COMPTES! fredericfan.club/betting", AlertRoleID),
 		"embeds":  []interface{}{embed},
 	}
 

@@ -2220,7 +2220,10 @@ func startMatchPoller(base, matchPath, apiKey string) {
 		{"小胖子vincent", "4397"},
 	}
 
-	os.MkdirAll("./data/matches", 0755)
+	// --- 1. NEW TWO-TIER FOLDER STRUCTURE ---
+	os.MkdirAll("./data/matches/archive", 0755) // THE VAULT (Fat files)
+	os.MkdirAll("./data/matches/lite", 0755)    // THE CACHE (UI files)
+
 	ticker := time.NewTicker(1 * time.Minute)
 
 	// UPGRADED STRUCT: Now includes the RR map!
@@ -2232,8 +2235,9 @@ func startMatchPoller(base, matchPath, apiKey string) {
 
 	go func() {
 		for ; true; <-ticker.C {
+			// --- 2. WE NOW READ AND WRITE TO THE LITE FILE ---
 			monthStr := time.Now().Format("2006-01")
-			filePath := fmt.Sprintf("./data/matches/%s.json", monthStr)
+			filePath := fmt.Sprintf("./data/matches/lite/lite_%s.json", monthStr)
 
 			monthlyMatches := make(map[string]*MatchEntry)
 			existingFile, err := os.ReadFile(filePath)
@@ -2283,6 +2287,19 @@ func startMatchPoller(base, matchPath, apiKey string) {
 						if id, ok := meta["match_id"].(string); ok { matchID = id }
 
 						if matchID != "" {
+							// --- 3. THE VAULT: SAVE FULL MATCH TO DISK PERMANENTLY ---
+							archivePath := fmt.Sprintf("./data/matches/archive/%s.json", matchID)
+							if _, err := os.Stat(archivePath); os.IsNotExist(err) {
+								fatBytes, _ := json.Marshal(m)
+								os.WriteFile(archivePath, fatBytes, 0644)
+							}
+
+							// --- 4. THE DIET: DELETE FAT FROM RAM AND FRONTEND ---
+							delete(m, "rounds")
+							delete(m, "kills")
+							delete(m, "events")
+
+							// Now add the lightweight match to our tracker
 							entry, exists := monthlyMatches[matchID]
 							if !exists {
 								entry = &MatchEntry{
@@ -2353,6 +2370,12 @@ func startMatchPoller(base, matchPath, apiKey string) {
 				return timeI > timeJ
 			})
 
+			// --- 5. NEW: CAP MEMORY AT 100 MATCHES ---
+			if len(finalData) > 50{
+				finalData = finalData[:50]
+			}
+
+			// Package up the remaining lite matches and save them
 			responseObj := map[string]interface{}{ "data": finalData }
 			newBytes, _ := json.Marshal(responseObj)
 
@@ -2365,7 +2388,7 @@ func startMatchPoller(base, matchPath, apiKey string) {
 		}
 	}()
 }
-
+	
 func getUserIDFromCookie(r *http.Request) string {
 	cookie, err := r.Cookie("fred_user_id")
 	if err != nil {
