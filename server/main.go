@@ -21,6 +21,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"fredericfanclub/server/discordbot"
+	"fredericfanclub/server/internal/premier"
 )
 
 var (
@@ -93,8 +94,10 @@ func main() {
 	allowed := parseOrigins(os.Getenv("CORS_ORIGINS"))
 
 	startMatchPoller(base, matchPath, apiKey)
+	premier.StartPremierPoller(base, matchPath, apiKey)
 
 	mux := http.NewServeMux()
+	premier.RegisterPremierRoutes(mux, allowed, applyCORS)
 
 	// --- USER PROFILE ROUTE ---
 	
