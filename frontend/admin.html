@@ -58,6 +58,30 @@
         <div id="adminCardList" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
         
         <p id="deleteStatusMsg"></p>
+            <hr style="border-color: #444; margin: 30px 0;">
+<h2>Schedule Upcoming Match</h2>
+
+<label>Opponent Name:</label>
+<input type="text" id="matchOpponent" placeholder="e.g. NOVA">
+
+<label>Opponent Tag:</label>
+<input type="text" id="matchTag" placeholder="e.g. #NV">
+
+<label>Date & Time:</label>
+<input type="datetime-local" id="matchTime">
+
+<label>Format:</label>
+<select id="matchFormat">
+    <option value="BO1 — Premier">BO1 — Premier</option>
+    <option value="BO3 — Premier">BO3 — Premier</option>
+    <option value="Playoffs">Playoffs</option>
+</select>
+
+<label>Map(s):</label>
+<input type="text" id="matchMaps" placeholder="e.g. Ascent or Ascent, Haven, Split">
+
+<button onclick="scheduleMatch()" style="background: #ffb01f;">Schedule Match</button>
+<p id="matchStatusMsg"></p>
     </div>
 
         <script>
@@ -210,6 +234,41 @@
                     image_url: document.getElementById('cardImage').value,
                     season: document.getElementById('cardSeason').value // NEW
                 };
+        async function scheduleMatch() {
+    const msg = document.getElementById('matchStatusMsg');
+    const token = document.getElementById('adminToken').value;
+
+    const data = {
+        opponent: document.getElementById('matchOpponent').value,
+        tag: document.getElementById('matchTag').value,
+        time: document.getElementById('matchTime').value,
+        format: document.getElementById('matchFormat').value,
+        maps: document.getElementById('matchMaps').value
+    };
+
+    try {
+        const response = await fetch(`${getApiBase()}/api/admin/schedule-match`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Admin-Token': token
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+        if (response.ok) {
+            msg.style.color = "lime";
+            msg.innerText = "Match scheduled successfully!";
+        } else {
+            msg.style.color = "red";
+            msg.innerText = "Error: " + result.error;
+        }
+    } catch (error) {
+        msg.style.color = "red";
+        msg.innerText = "Fetch Error: " + error.message;
+    }
+}
     </script>
     </body>
 </html>

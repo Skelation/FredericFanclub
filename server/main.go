@@ -137,6 +137,97 @@ func main() {
 		fmt.Fprintf(w, `{"username": "%s", "avatar_url": "%s", "fredtokens": %g, "linked_player": "%s"}`, username, avatarURL, tokens, linkedPlayer)
 	})
 
+	mux.HandleFunc("GET /api/matches/upcoming", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+
+		if r.Method == http.MethodOptions {
+			return
+		}
+
+		data, err := os.ReadFile("data/premier/nextGames.json")
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"matches": []}`)) // Return empty object instead of error
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	})
+
+	type UpcomingMatch struct {
+		Opponent string `json:"opponent"`
+		Tag      string `json:"tag"`
+		Time     string `json:"time"`
+		Format   string `json:"format"`
+		Maps     string `json:"maps"`
+	}
+
+	type NextGamesContainer struct {
+		Matches []UpcomingMatch `json:"matches"`
+	}
+
+	var fileMutex sync.Mutex
+
+	mux.HandleFunc("/api/admin/schedule-match", func(w http.ResponseWriter, r *http.Request) {
+		// 1. Apply CORS using your available function
+    // Replace allowedOrigins with your actual slice of strings
+    applyCORS(w, r, allowed)
+
+    // 2. Handle Preflight
+    if r.Method == http.MethodOptions {
+        return
+    }
+
+    // 3. Security Check
+    adminSecret := os.Getenv("FRED_ADMIN_TOKEN") // Or your hardcoded string
+    if r.Header.Get("X-Admin-Token") != adminSecret {
+        http.Error(w, `{"error": "Unauthorized"}`, http.StatusUnauthorized)
+        return
+    }
+
+    // 4. Parse Incoming JSON
+    var newMatch UpcomingMatch
+    if err := json.NewDecoder(r.Body).Decode(&newMatch); err != nil {
+        http.Error(w, `{"error": "Invalid request body"}`, http.StatusBadRequest)
+        return
+    }
+
+    // 5. Atomic File Update (Thread Safe)
+    fileMutex.Lock()
+    defer fileMutex.Unlock()
+
+    filePath := "data/premier/nextGames.json"
+    var container NextGamesContainer
+
+    // Read existing file
+    fileData, err := os.ReadFile(filePath)
+    if err == nil {
+        json.Unmarshal(fileData, &container)
+    }
+
+    // Append the new match
+    container.Matches = append(container.Matches, newMatch)
+
+    // Write back to file
+    updatedData, err := json.MarshalIndent(container, "", "  ")
+    if err != nil {
+        http.Error(w, `{"error": "Failed to process data"}`, http.StatusInternalServerError)
+        return
+    }
+
+    err = os.WriteFile(filePath, updatedData, 0644)
+    if err != nil {
+        http.Error(w, `{"error": "Failed to save to disk"}`, http.StatusInternalServerError)
+        return
+    }
+
+    // 6. Success Response
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(http.StatusOK)
+    w.Write([]byte(`{"message": "Match scheduled successfully"}`))
+})
+
 	// --- AUTHENTICATION ROUTES ---
 
 	// 1. Send the user to Discord to log in
