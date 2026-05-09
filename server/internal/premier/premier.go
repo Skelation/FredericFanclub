@@ -137,6 +137,17 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 			premierMutex.Unlock()
 
 			log.Printf("Premier Poller: Tracked %d matches (Raw files secured in Vault)", len(finalData))
+
+			// Calculate and write the stats for your 6 specific players
+			team := []string{
+				"Heri#BLUB",
+				"TheMisterED#0007",
+				"Graussbyt#5629",
+				"hhj#8769",
+				"Djibはコリーヌ お あいして#LoVe",
+				"Lal6s9gne#6641",
+			}
+			GenerateTeamStats(team)
 		}
 	}()
 }
@@ -162,6 +173,25 @@ func RegisterPremierRoutes(mux *http.ServeMux, allowed []string, applyCORS func(
 		}
 
 		w.Header().Set("Content-Type", "application/json")
+		w.Write(data)
+	})
+
+	mux.HandleFunc("OPTIONS /api/matches/stats", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/matches/stats", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		statsFilePath := "./data/premier/dashboard_stats.json"
+
+		data, err := os.ReadFile(statsFilePath)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error": "Dashboard stats not generated yet. Please wait for the poller."}`))
+			return
+		}
+
 		w.Write(data)
 	})
 }
