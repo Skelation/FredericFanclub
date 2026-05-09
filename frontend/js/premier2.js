@@ -65,9 +65,15 @@ async function loadPremierMatches() {
                         </div>
                         <div class="match-format"><div class="format-tag">PREMIER</div></div>
                     </div>
-                </div>`;
+                <div class="countdown">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                    Dans <strong class="match-timer" data-time="${m.time}">Calcul...</strong> 
+                </div>
+            </div>
+`;
             });
         }
+        startCountdown();
 
     listDiv.innerHTML += `
             <div class="season-heading" style="padding:1.5rem 0 .75rem">Résultats récents</div>
@@ -215,6 +221,38 @@ async function loadPremierMatches() {
         console.error(e);
         listDiv.innerHTML = `<div class="loader" style="color: red;">Error loading matches.</div>`;
     }
+}
+
+function startCountdown() {
+    const updateTimers = () => {
+        const timers = document.querySelectorAll('.match-timer');
+        
+        timers.forEach(timer => {
+            const targetDate = new Date(timer.getAttribute('data-time'));
+            const now = new Date();
+            const diff = targetDate - now;
+
+            if (diff <= 0) {
+                timer.innerHTML = "En cours ou terminé";
+                return;
+            }
+
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+
+            let countdownText = "";
+            if (days > 0) countdownText += `${days}j `;
+            if (hours > 0 || days > 0) countdownText += `${hours}h `;
+            countdownText += `${minutes}m`;
+
+            timer.innerHTML = countdownText;
+        });
+    };
+
+    // Run immediately and then every minute
+    updateTimers();
+    setInterval(updateTimers, 60000);
 }
 
 document.addEventListener('DOMContentLoaded', loadPremierMatches);
