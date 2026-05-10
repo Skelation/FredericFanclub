@@ -146,6 +146,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 				"hhj#8769",
 				"Djibはコリーヌ お あいして#LoVe",
 				"Lal6s9gne#6641",
+				"Riboox",
 			}
 			GenerateTeamStats(team)
 		}

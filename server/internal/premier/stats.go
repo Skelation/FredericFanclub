@@ -147,7 +147,11 @@ func isTarget(name string, targets []string) bool {
 func GenerateTeamStats(targetPlayers []string) {
 	archiveDir := "./data/premier/archive"
 	statsFile := "./data/premier/dashboard_stats.json"
-	matchLimit := 15
+	matchLimit := 2
+
+	aliasMap := map[string]string{
+		"Cailloux#BOT": "Riboox", // Add as many as you want
+	}
 
 	playerAggregates := make(map[string]aggPlayerStats)
 	teamMapRates := make(map[string]MapStats)
@@ -213,6 +217,9 @@ func GenerateTeamStats(targetPlayers []string) {
 		playerTeams := make(map[string]string)
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
+			if alias, exists := aliasMap[fullName]; exists {
+				fullName = alias
+			}
 			playerTeams[p.PUUID] = p.Team
 			if isTarget(fullName, targetPlayers) {
 				teamCounts[p.Team]++
@@ -342,6 +349,9 @@ func GenerateTeamStats(targetPlayers []string) {
 
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
+			if alias, exists := aliasMap[fullName]; exists {
+				fullName = alias
+			}
 			if !isTarget(fullName, targetPlayers) {
 				continue
 			}
