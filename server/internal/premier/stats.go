@@ -147,7 +147,7 @@ func isTarget(name string, targets []string) bool {
 func GenerateTeamStats(targetPlayers []string) {
 	archiveDir := "./data/premier/archive"
 	statsFile := "./data/premier/dashboard_stats.json"
-	matchLimit := 2
+	matchLimit := 4
 
 	aliasMap := map[string]string{
 		"Cailloux#BOT": "Riboox", // Add as many as you want
