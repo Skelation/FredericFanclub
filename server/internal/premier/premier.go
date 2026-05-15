@@ -143,7 +143,6 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 				return startI > startJ
 			})
 
-			// Keep memory clean: Only hold the last 100 matches in RAM
 			if len(finalData) > 100 {
 				finalData = finalData[:100]
 			}

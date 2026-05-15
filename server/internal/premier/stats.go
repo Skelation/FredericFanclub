@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time" // Added time package
 )
 
 // --- JSON INPUT STRUCTURES ---
@@ -42,10 +43,10 @@ type MatchData struct {
 		} `json:"roster"`
 	} `json:"teams"`
 	Kills []struct {
-		KillerPUUID string `json:"killer_puuid"`
-		VictimPUUID string `json:"victim_puuid"`
-		VictimTeam  string `json:"victim_team"`
-		Assistants  []struct {
+		KillerPUUID     string `json:"killer_puuid"`
+		VictimPUUID     string `json:"victim_puuid"`
+		VictimTeam      string `json:"victim_team"`
+		Assistants      []struct {
 			AssistantPUUID string `json:"assistant_puuid"`
 		} `json:"assistants"`
 		Round           int `json:"round"`
@@ -147,11 +148,18 @@ func isTarget(name string, targets []string) bool {
 func GenerateTeamStats(targetPlayers []string) {
 	archiveDir := "./data/premier/archive"
 	statsFile := "./data/premier/dashboard_stats.json"
-	matchLimit := 4
 
+	// --- DATE FILTER LOGIC ---
+	// Set the cutoff date for the current split (DD/MM/YYYY)
+	cutoffDate, _ := time.Parse("02/01/2006", "06/05/2026")
+	cutoffUnix := cutoffDate.Unix()
+	// -------------------------
+
+	// --- 1. ADD YOUR ALIASES HERE ---
 	aliasMap := map[string]string{
-		"Cailloux#BOT": "Riboox", // Add as many as you want
+		"Cailloux#BOT": "Riboox", 
 	}
+	// --------------------------------
 
 	playerAggregates := make(map[string]aggPlayerStats)
 	teamMapRates := make(map[string]MapStats)
@@ -167,7 +175,6 @@ func GenerateTeamStats(targetPlayers []string) {
 		return
 	}
 
-	// 1. Sort files chronologically to only parse the last 15 games
 	type fileInfo struct {
 		Path      string
 		GameStart int64
@@ -193,13 +200,19 @@ func GenerateTeamStats(targetPlayers []string) {
 		}
 	}
 
+	// Sort chronologically (newest first)
 	sort.Slice(validFiles, func(i, j int) bool {
 		return validFiles[i].GameStart > validFiles[j].GameStart
 	})
 
-	if len(validFiles) > matchLimit {
-		validFiles = validFiles[:matchLimit]
+	// Filter out any files BEFORE the cutoff date
+	var recentFiles []fileInfo
+	for _, f := range validFiles {
+		if f.GameStart >= cutoffUnix {
+			recentFiles = append(recentFiles, f)
+		}
 	}
+	validFiles = recentFiles // Overwrite with only the recent ones
 
 	// 2. Process only the recent valid files
 	for _, fInfo := range validFiles {
@@ -217,9 +230,13 @@ func GenerateTeamStats(targetPlayers []string) {
 		playerTeams := make(map[string]string)
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
+
+			// --- 2. APPLY ALIAS FOR TEAM DETECTION ---
 			if alias, exists := aliasMap[fullName]; exists {
 				fullName = alias
 			}
+			// -----------------------------------------
+
 			playerTeams[p.PUUID] = p.Team
 			if isTarget(fullName, targetPlayers) {
 				teamCounts[p.Team]++
@@ -349,9 +366,13 @@ func GenerateTeamStats(targetPlayers []string) {
 
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
+
+			// --- 3. APPLY ALIAS FOR STAT CALCULATION ---
 			if alias, exists := aliasMap[fullName]; exists {
 				fullName = alias
 			}
+			// -------------------------------------------
+
 			if !isTarget(fullName, targetPlayers) {
 				continue
 			}
