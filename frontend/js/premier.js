@@ -1,9 +1,10 @@
 // Change this if you ever change your primary tracker in the Go backend!
-const ANCHOR_PLAYER = "heri"; 
+
+// Remove the ANCHOR_PLAYER constant since we now use a roster array
 
 window.premierMatchesData = [];
 
-// NEW HELPER: Aggressively hunts down the team name no matter where the API hides it
+// Helper: Aggressively hunts down the team name no matter where the API hides it
 function extractTeamName(teamData, fallback) {
     if (!teamData) return fallback;
     if (teamData.roster && teamData.roster.name) return teamData.roster.name;
@@ -32,7 +33,7 @@ async function loadPremierMatches() {
         window.premierMatchesData = data.data;
         listDiv.innerHTML = ""; 
         
-        // 1. Fetch upcoming matches from your new JSON file
+        // 1. Fetch upcoming matches
         const nextRes = await fetch(`${getApiBase()}/api/matches/upcoming`);
         const nextData = await nextRes.json();
         
@@ -69,16 +70,14 @@ async function loadPremierMatches() {
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
                     Dans <strong class="match-timer" data-time="${m.time}">Calcul...</strong> 
                 </div>
-            </div>
-`;
+            </div>`;
             });
         }
         startCountdown();
 
-    listDiv.innerHTML += `
-            <div class="season-heading" style="padding:1.5rem 0 .75rem">Résultats récents</div>
-        `
-        // Render the left-side list
+        listDiv.innerHTML += `<div class="season-heading" style="padding:1.5rem 0 .75rem">Résultats récents</div>`;
+
+        // Render the list of played matches
         data.data.forEach((matchObj, index) => {
             const match = matchObj.match || matchObj; 
             const meta = match.metadata;
@@ -87,19 +86,38 @@ async function loadPremierMatches() {
             const dateStr = date.toLocaleDateString();
             const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
-            // --- DYNAMIC TEAM DETECTION ---
+            // --- DYNAMIC TEAM DETECTION (ROSTER BASED) ---
+            // Include all known team players here (must be lowercase)
+            const myRoster = ["heri", "themistered", "graussbyt", "lal6s9gne", "djibはコリーヌ お あいして", "hhj", "Riboox"]
+           
             let myRounds = 0, enemyRounds = 0;
             let anchorWon = false;
-            let anchorTeamId = "Red";
+            let anchorTeamId = "Blue"; // Default fallback
             const roundsPlayed = meta.rounds_played;
 
-            // Find which team our Anchor Player was on
             const allPlayers = match.players.all_players || match.players;
-            const anchor = allPlayers.find(p => p.name.toLowerCase() === ANCHOR_PLAYER.toLowerCase());
-            if (anchor) anchorTeamId = anchor.team || anchor.team_id;
+            
+            // Count how many of our roster players are on Blue vs Red
+            let blueCount = 0;
+            let redCount = 0;
+            
+            allPlayers.forEach(p => {
+                const pName = p.name.toLowerCase();
+                if (myRoster.includes(pName)) {
+                    const tId = p.team || p.team_id;
+                    if (tId === "Blue") blueCount++;
+                    if (tId === "Red") redCount++;
+                }
+            });
+
+            // The team with the most of our players is OUR team
+            if (redCount > blueCount) {
+                anchorTeamId = "Red";
+            }
+            const enemyTeamId = anchorTeamId === "Red" ? "Blue" : "Red";
+
             let myTeamPlayers = allPlayers.filter(p => (p.team || p.team_id) === anchorTeamId);
             let enemyTeamPlayers = allPlayers.filter(p => (p.team || p.team_id) !== anchorTeamId);
-            if (enemyTeamPlayers.length > 0) enemyTeamId = enemyTeamPlayers[0].team || enemyTeamPlayers[0].team_id;
 
             const sortByScore = (a, b) => b.stats.score - a.stats.score;
             myTeamPlayers.sort(sortByScore);
@@ -107,7 +125,8 @@ async function loadPremierMatches() {
 
             let myTeam = null;
             let enemyTeam = null;
-            // Extract the scores based on the Anchor's team
+
+            // Extract the scores based on the detected team ID
             if (Array.isArray(match.teams)) {
                 myTeam = match.teams.find(t => t.team_id === anchorTeamId);
                 enemyTeam = match.teams.find(t => t.team_id !== anchorTeamId);
@@ -115,22 +134,20 @@ async function loadPremierMatches() {
                 if (enemyTeam) { enemyRounds = enemyTeam.rounds_won; }
             } else if (match.teams) {
                 myTeam = match.teams[anchorTeamId.toLowerCase()];
-                const enemyTeamId = anchorTeamId.toLowerCase() === 'red' ? 'blue' : 'red';
-                enemyTeam = match.teams[enemyTeamId];
+                enemyTeam = match.teams[enemyTeamId.toLowerCase()];
                 if (myTeam) { myRounds = myTeam.rounds_won; anchorWon = myTeam.has_won; }
                 if (enemyTeam) { enemyRounds = enemyTeam.rounds_won; }
             }
 
-            const result = anchorWon ? "win" : "loss"
-            const encounterTeamScore = anchorWon ? "1" : "0"
-            const encounterEnemyScore = anchorWon ? "0" : "1"
-            const stringResult = anchorWon ? "Victoire" : "Défaite"
-            const map = meta.map
+            const result = anchorWon ? "win" : "loss";
+            const stringResult = anchorWon ? "Victoire" : "Défaite";
+            const map = meta.map;
             let myTeamName = "YOUR TEAM", enemyTeamName = "ENEMY TEAM"; 
 
             const maxScore = Math.max(...allPlayers.map(p => p.stats.score));
             let myTeamData = null;
             let enemyTeamData = null;
+
             if (Array.isArray(match.teams)) {
                 myTeamData = match.teams.find(t => t.team_id === anchorTeamId);
                 enemyTeamData = match.teams.find(t => t.team_id !== anchorTeamId);
@@ -190,7 +207,7 @@ async function loadPremierMatches() {
 
             const scoreboardHtml = renderRows(myTeamPlayers, myTeamName) + renderRows(enemyTeamPlayers, enemyTeamName);
 
-                        listDiv.innerHTML += `
+            listDiv.innerHTML += `
             <div class="match-card ${result}" data-result="${result}" data-teams="${myTeamName} ${enemyTeamName}" onclick="toggleCard(this)">
                 <div class="match-summary">
                     <div class="match-date">${timeStr}<span>${dateStr}</span></div>
@@ -213,10 +230,8 @@ async function loadPremierMatches() {
                         </table>
                     </div>
                 </div>
-            </div>
-
-            `;
-        })
+            </div>`;
+        });
     } catch (e) {
         console.error(e);
         listDiv.innerHTML = `<div class="loader" style="color: red;">Error loading matches.</div>`;
@@ -250,7 +265,6 @@ function startCountdown() {
         });
     };
 
-    // Run immediately and then every minute
     updateTimers();
     setInterval(updateTimers, 60000);
 }
