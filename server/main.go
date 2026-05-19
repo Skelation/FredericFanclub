@@ -665,6 +665,9 @@ func main() {
 			targetPuuid = "7f94422d-6397-5d35-b21c-da98e467f339"
 		case "小胖子vincent", "vincent": 
 			targetPuuid = "e0454220-fc45-5447-82a4-a6e94d326738"
+		case "Riboox", "riboox":
+			targetPuuid = "a8b56e34-41df-525b-a45b-b61e15bf2d50"
+
 		}
 
 		if targetPuuid == "" {
@@ -2309,6 +2312,7 @@ func startMatchPoller(base, matchPath, apiKey string) {
 		{"Lal6s9gne", "6641"},
 		{"XTrixツ", "DREAM"},
 		{"小胖子vincent", "4397"},
+		{"Riboox", "NG4LF"},
 	}
 
 	// --- 1. NEW TWO-TIER FOLDER STRUCTURE ---

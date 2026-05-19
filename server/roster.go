@@ -122,6 +122,7 @@ func defaultRosterPlayers() []riotPlayer {
 		{Name: "hhj", Tag: "8769"},
 		{Name: "小胖子vincent", Tag: "4397"},
 		{Name: "XTrixツ", Tag: "DREAM"},
+		{Name: "Riboox", Tag: "NG4LF"},
 	}
 }
 
