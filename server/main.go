@@ -666,7 +666,7 @@ func main() {
 		case "小胖子vincent", "vincent": 
 			targetPuuid = "e0454220-fc45-5447-82a4-a6e94d326738"
 		case "Riboox", "riboox":
-			targetPuuid = "a8b56e34-41df-525b-a45b-b61e15bf2d50"
+			targetPuuid = "c06d3828-ff76-5cab-a282-6a95aaae0215"
 
 		}
 
@@ -800,7 +800,7 @@ func main() {
 					if k >= 25 { hardCarry = true }
 					if d == 0 { d = 1 } 
 					if (k / d) > 1.0 { positiveImpact = true }
-					if (myRoundsWon - enemyRoundsWon) >= 6 { flawlessVictory = true }
+					if (myRoundsWon - enemyRoundsWon) >= 5 { flawlessVictory = true }
 					if a >= 10 && (roundsPlayed - d) >= 10 { combatMedic = true }
 					
 					break 
@@ -828,7 +828,7 @@ func main() {
 		case "Positive Impact": passed = positiveImpact; progressMsg = "Requires a >1.0 KD in a match today."
 
 		case "Hard Carry": passed = hardCarry; progressMsg = "Requires 25+ kills in one match today."
-		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 6+ rounds today."
+		case "Flawless Victory": passed = flawlessVictory; progressMsg = "Requires winning by 5+ rounds today."
 		case "Combat Medic": passed = combatMedic; progressMsg = "Requires 10 assists & 10 rounds survived today."
 		case "Top Fragger": passed = totalKills >= 50; progressMsg = fmt.Sprintf("%.0f/50 Kills Today", totalKills)
 		}
