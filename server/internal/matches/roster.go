@@ -1,4 +1,4 @@
-package main
+package matches
 
 import (
 	"context"
@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/joho/godotenv"
+
+	"fredericfanclub/server/internal/middleware"
 )
 
 type riotPlayer struct {
@@ -31,10 +33,10 @@ type rosterMatchOut struct {
 }
 
 type playerResume struct {
-	Name       string `json:"name"`
-	Tag        string `json:"tag"`
-	NextStart  int    `json:"nextStart"`
-	Exhausted  bool   `json:"exhausted"`
+	Name      string `json:"name"`
+	Tag       string `json:"tag"`
+	NextStart int    `json:"nextStart"`
+	Exhausted bool   `json:"exhausted"`
 }
 
 type rosterAPIResponse struct {
@@ -64,7 +66,7 @@ type rosterCacheEnvelope struct {
 
 var rosterCacheMu sync.Mutex
 
-func loadDotEnv() {
+func LoadDotEnv() {
 	wd, err := os.Getwd()
 	if err != nil {
 		wd = "."
@@ -336,13 +338,13 @@ func buildRosterResponse(ctx context.Context, base, matchPath, apiKey, region, p
 				warns = append(warns, rrWarn)
 			}
 
-			matches, next, exhausted, matchWarn := fetchPlayerCompetitivePages(ctx, base, matchPath, region, platform, apiKey, p, 0, initialPages)
+			ms, next, exhausted, matchWarn := fetchPlayerCompetitivePages(ctx, base, matchPath, region, platform, apiKey, p, 0, initialPages)
 			if matchWarn != "" {
 				warns = append(warns, matchWarn)
 			}
 
 			results[i] = playerFetchResult{
-				matches:     matches,
+				matches:     ms,
 				rrByMatchID: rrByMatchID,
 				resume:      playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted},
 				warnings:    warns,
@@ -374,7 +376,6 @@ func buildRosterResponse(ctx context.Context, base, matchPath, apiKey, region, p
 	}
 }
 
-// Fetches up to maxPages of competitive mode matches (size 10 each). Returns deduped matches for this player, next API start offset, exhausted, optional warning.
 func fetchPlayerCompetitivePages(
 	ctx context.Context,
 	base, matchPath, region, platform, apiKey string,
@@ -437,9 +438,9 @@ func fetchPlayerCompetitivePages(
 	return collected, start, false, ""
 }
 
-func mergeMatchesIntoAgg(agg map[string]*aggEntry, p riotPlayer, matches []json.RawMessage, rrByMatchID map[string]int64, noID *int) {
+func mergeMatchesIntoAgg(agg map[string]*aggEntry, p riotPlayer, ms []json.RawMessage, rrByMatchID map[string]int64, noID *int) {
 	pk := playerKey(p.Name, p.Tag)
-	for _, m := range matches {
+	for _, m := range ms {
 		id := matchIDFromJSON(m)
 		if id == "" {
 			*noID++
@@ -496,7 +497,7 @@ func computeHasMore(resume []playerResume) bool {
 var rosterRefreshing bool
 
 func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []string, base, matchPath, apiKey string) {
-	applyCORS(w, r, allowed)
+	middleware.ApplyCORS(w, r, allowed)
 	region := strings.TrimSpace(os.Getenv("VALORANT_REGION"))
 	if region == "" {
 		region = "eu"
@@ -515,8 +516,6 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 	hasCache := err == nil
 	isStale := !hasCache || time.Since(time.Unix(cached.SavedAtUnix, 0)) > ttl
 
-	// If we have any cached data (even stale), return it immediately
-	// and refresh in the background so the next request is also instant.
 	if hasCache {
 		if isStale && !rosterRefreshing {
 			rosterRefreshing = true
@@ -538,7 +537,6 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 		return
 	}
 
-	// No cache at all — first ever load, must wait.
 	rosterCacheMu.Unlock()
 	resp := buildRosterResponse(r.Context(), base, matchPath, apiKey, region, platform, players, initialPages)
 	rosterCacheMu.Lock()
@@ -553,7 +551,7 @@ func handleRosterMatches(w http.ResponseWriter, r *http.Request, allowed []strin
 }
 
 func handleRosterMatchesMore(w http.ResponseWriter, r *http.Request, allowed []string, base, matchPath, apiKey string) {
-	applyCORS(w, r, allowed)
+	middleware.ApplyCORS(w, r, allowed)
 	region := strings.TrimSpace(os.Getenv("VALORANT_REGION"))
 	if region == "" {
 		region = "eu"
@@ -605,11 +603,11 @@ func handleRosterMatchesMore(w http.ResponseWriter, r *http.Request, allowed []s
 		if rrWarn != "" {
 			warnings = append(warnings, rrWarn)
 		}
-		matches, next, exhausted, w := fetchPlayerCompetitivePages(r.Context(), base, matchPath, region, platform, apiKey, p, pr.NextStart, loadMorePages)
-		if w != "" {
-			warnings = append(warnings, w)
+		ms, next, exhausted, warn := fetchPlayerCompetitivePages(r.Context(), base, matchPath, region, platform, apiKey, p, pr.NextStart, loadMorePages)
+		if warn != "" {
+			warnings = append(warnings, warn)
 		}
-		mergeMatchesIntoAgg(deltaAgg, p, matches, rrByMatchID, &noID)
+		mergeMatchesIntoAgg(deltaAgg, p, ms, rrByMatchID, &noID)
 		newResume = append(newResume, playerResume{Name: p.Name, Tag: p.Tag, NextStart: next, Exhausted: exhausted})
 	}
 
