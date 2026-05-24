@@ -241,13 +241,21 @@
             if (res.ok) _usersCache = (await res.json()) || [];
         }
 
-        function filterUsers(query) {
+        async function filterUsers(query) {
+            // Lazy-load on first use so the token blur timing doesn't matter
+            if (_usersCache.length === 0) await loadUsersForMint();
+
             const dd = document.getElementById('userDropdown');
             const q = (query || '').trim().toLowerCase();
-            if (!q) { dd.style.display = 'none'; return; }
-            const matches = _usersCache.filter(u =>
-                (u.Username || '').toLowerCase().includes(q) || (u.DiscordID || '').includes(q)
-            ).slice(0, 8);
+
+            // Empty query → show everyone; typed query → filter
+            const source = q
+                ? _usersCache.filter(u =>
+                    (u.Username || '').toLowerCase().includes(q) ||
+                    (u.DiscordID || '').includes(q))
+                : _usersCache;
+
+            const matches = source.slice(0, 10);
             if (!matches.length) { dd.style.display = 'none'; return; }
             dd.innerHTML = matches.map(u => `
                 <div class="user-opt" onclick="selectUser('${u.DiscordID}','${(u.Username||'').replace(/'/g,"\\'")}')">
