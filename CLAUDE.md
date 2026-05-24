@@ -5,7 +5,7 @@
 Full-stack esports fan engagement platform for a Valorant team called "FRED" (Frederic Fanclub / Fred Esports). Combines match tracking, a trading card economy, live prop betting, and a community radio.
 
 - **Frontend:** Vanilla JS + HTML/CSS, served statically (Node on port 3000)
-- **Backend:** Go server (`server/main.go`, 8600+ lines) on port 8080, SQLite (`server/fred-dev.db`)
+- **Backend:** Go server (split across `server/*.go`, ~3977 total lines) on port 8080, SQLite (`server/database/fred.db`)
 - **Auth:** Discord OAuth2 — session cookie, `credentials: 'include'` on all API calls
 - **API base:** `http://localhost:8080` (local) / `https://api.fredericfan.club` (prod) — auto-detected in `getApiBase()`
 
@@ -16,21 +16,33 @@ Full-stack esports fan engagement platform for a Valorant team called "FRED" (Fr
 ```
 FredericFanclub/
 ├── frontend/
-│   ├── *.html              — all pages (matches, premier, packs, inventory, catalog, radio, betting, leaderboard, tradeup, player-*)
+│   ├── *.html              — all pages (matches, premier, packs, inventory, catalog, radio, betting,
+│   │                         leaderboard, tradeup, admin, player-*)
 │   ├── css/
 │   │   ├── styles.css      — global dark theme (Orbitron + Rajdhani fonts)
 │   │   └── premier.css     — premier page-specific styles (self-contained, includes nav/hero/layout)
 │   ├── js/
-│   │   ├── site.js         — main app logic (~1922 lines): auth, matches, packs, betting, quests, radio
+│   │   ├── site.js         — main app logic (~2007 lines): auth, matches, packs, betting, quests, radio
 │   │   └── premier.js      — premier dashboard: player stats, map win rates, match scoreboard
 │   ├── images/             — player photos, logos
 │   └── audio/              — radio tracks (15) + intermissions (6)
 └── server/
-    ├── main.go             — all API endpoints, WebSocket, economy logic
+    ├── main.go             — startup, globals, WebSocket broadcaster (99 lines)
+    ├── db.go               — database init, all CREATE TABLE / migrations
+    ├── auth.go             — Discord OAuth2 routes
+    ├── user.go             — /api/user/me, badges, showcase, leaderboard
+    ├── economy.go          — buy-pack, daily, trade-up, shred, redeem-code
+    ├── inventory.go        — /api/inventory, /api/catalog
+    ├── radio.go            — radio drop scheduler, active-drop, claim, captcha
+    ├── betting.go          — WebSocket, market, place-bet
+    ├── matches.go          — roster, upcoming matches, /api/packs/season
+    ├── quests.go           — quests list + verify
+    ├── admin.go            — all /api/admin/* endpoints
+    ├── util.go             — shared helpers (CORS, logging, dotenv, etc.)
     ├── roster.go           — Valorant API integration, match syncing
-    ├── database/           — SQL migrations
-    ├── discordbot/         — Discord bot
-    └── fred-dev.db         — SQLite database
+    ├── internal/premier/   — premier stats module (premier.go, stats.go)
+    ├── database/           — SQL migrations + fred.db (path from DB_PATH env, default ./database/fred.db)
+    └── discordbot/         — Discord bot
 ```
 
 ---
@@ -91,11 +103,31 @@ Wallet is displayed in navbar and refreshed via `window.loadUserProfile()`.
 - `audio/` directory holds all `.mp3` files
 - Volume persisted to `localStorage`
 
+**Radio Drops** (auto-scheduled FT rewards for live listeners):
+- Server schedules random drops every 15–40 min (configurable via `server_config` table)
+- Drop is active for a 7-minute claim window; users solve a CAPTCHA then call `POST /api/radio/claim`
+- Frontend polls `GET /api/radio/active-drop`; shows claim UI when a drop is live
+- Admin can manually trigger a drop via `POST /api/admin/radio-drop`
+- Claims tracked in `radio_drops` + `radio_drop_claims` tables (prevents double-claim)
+
 ### Matches (matches.html vs premier.html)
 
 - `matches.html` — roster match history, uses `styles.css`, fetches `/api/matches/roster`
 - `premier.html` — advanced stats dashboard, uses `premier.css` (self-contained), fetches `/api/matches/premier` + `/api/matches/stats`
 - Both share `site.js`; `premier.html` also loads `premier.js`
+
+### User Badges & Showcase
+
+- Badges awarded automatically (e.g., milestones) and stored in `user_badges` table
+- Users set a showcase card via `POST /api/user/showcase`; displayed on leaderboard entries
+- `GET /api/user/badges` returns earned badge list; `GET /api/user/showcase` returns current showcase card
+
+### Redemption Codes
+
+- Admin creates codes via `POST /api/admin/create-code` with `{ code, reward_ft, max_uses, expires_at }`
+- Users redeem via `POST /api/economy/redeem-code` with `{ code }`
+- Tracked in `redeem_codes` + `code_redemptions` tables — one claim per user per code
+- Economy balance: keep codes in 50–300 FT range (daily is 250 FT)
 
 ### Betting
 
@@ -108,69 +140,55 @@ Wallet is displayed in navbar and refreshed via `window.loadUserProfile()`.
 ## API Endpoints (Selected)
 
 ```
-GET  /api/user/me              — current user profile + FT balance
-GET  /api/matches/roster       — match history (paginated, player-filtered)
-GET  /api/matches/premier      — premier matches with full scoreboards
-GET  /api/matches/stats        — aggregated player stats
-POST /api/economy/buy-pack     — open a pack (costs 250 FT, returns card)
-POST /api/economy/daily        — claim daily reward
-POST /api/economy/shred        — shred card for FT
-POST /api/economy/trade-up     — trade 5 cards → 1 higher rarity
-GET  /api/inventory            — user's owned cards
-GET  /api/catalog              — all cards with unlock status
-GET  /api/quests               — daily missions
-POST /api/quests/verify        — check and complete a quest
-POST /api/betting/place        — place a bet
-GET  /api/betting/market       — active market
-WS   /api/ws/betting           — live bet stream
-```
+GET  /api/user/me                  — current user profile + FT balance
+GET  /api/user/badges              — earned badges list
+GET  /api/user/showcase            — user's showcase card
+POST /api/user/showcase            — set showcase card
+GET  /api/leaderboard              — FT leaderboard
+GET  /api/matches/roster           — match history (paginated, player-filtered)
+POST /api/matches/roster/more      — load more roster matches
+GET  /api/matches/upcoming         — scheduled upcoming matches
+GET  /api/matches/premier          — premier matches with full scoreboards
+GET  /api/matches/stats            — aggregated player stats
+GET  /api/packs/season             — current pack season
+POST /api/economy/buy-pack         — open a pack (costs 250 FT, returns card)
+POST /api/economy/daily            — claim daily reward
+POST /api/economy/shred            — shred card for FT
+POST /api/economy/trade-up         — trade 5 cards → 1 higher rarity
+POST /api/economy/redeem-code      — redeem a radio code for FT
+GET  /api/inventory                — user's owned cards
+GET  /api/catalog                  — all cards with unlock status
+GET  /api/quests                   — daily missions
+POST /api/quests/verify            — check and complete a quest
+POST /api/betting/place            — place a bet
+GET  /api/betting/market           — active market
+WS   /api/ws/betting               — live bet stream
+GET  /api/radio/active-drop        — current radio drop (if any)
+GET  /api/radio/captcha/new        — get a CAPTCHA challenge for claiming
+POST /api/radio/claim              — claim active radio drop (requires CAPTCHA)
 
-Admin endpoints require `X-Admin-Token` header (defined in Go server env).
+Admin (X-Admin-Token header required):
+POST /api/admin/create-code        — create a redemption code
+POST /api/admin/radio-drop         — manually trigger a radio drop
+POST /api/admin/schedule-match     — add an upcoming match
+POST /api/admin/cards              — add a card to the catalog
+POST /api/admin/delete-card        — remove a card
+POST /api/admin/tokens             — adjust a user's FT balance
+POST /api/admin/link-user          — link Discord user to Valorant player
+GET  /api/admin/users              — list all users
+POST /api/admin/preview-prop       — create a preview prop market
+POST /api/admin/publish-prop       — publish prop to users
+POST /api/admin/lock-prop          — lock betting on active market
+POST /api/admin/resolve-prop       — settle bets on active market
+POST /api/admin/cancel-market      — cancel active market (refund bets)
+POST /api/admin/set-pack-season    — change the active pack season
+```
 
 ---
 
 ## Next Steps
 
-### 1. Sync `matches.html` look with `premier.html`
-
-`premier.html` uses `premier.css` which is a fully self-contained stylesheet with a polished dark-cyber aesthetic (self-contained nav, hero, section headings, card grid styles). `matches.html` uses `styles.css` which has an older/different look.
-
-**What needs to change:**
-- Switch `matches.html` to use `premier.css` instead of (or in addition to) `styles.css`, OR port the relevant design tokens and component styles into `styles.css`
-- Align the hero section (`<header class="page-hero">`) — `premier.html` hero has subtitle text (`<p>`) under the `<h1>`, `matches.html` does not
-- Match card styling should use the same card/border/shadow pattern as premier's match list
-- Section headings should use the `.section-heading` class from `premier.css`
-- Filter bar and search box should match premier's `.filter-bar` / `.filter-btn` / `.search-box` pattern
-- The player filter toggle buttons (`#playerFilterBar`) should be restyled to match premier's pill/toggle aesthetic
-- Keep `matches.html` JS logic (roster filtering, pagination, RR delta) intact — only visual changes
-
-**Key classes in `premier.css` to replicate or reference:**
-- `.section-heading`, `.filter-bar`, `.filter-btn`, `.filter-sep`, `.search-box`
-- `.match-list`, `.match-card`, `.scoreboard-table`
-- `.page-hero`, `.bg-waves`
-
----
-
-### 2. Radio Redemption Codes — New Way to Earn FT
-
-Add a "redeem a code" mechanic on `radio.html`: secret codes announced on-air that listeners can type in to claim a one-time FT reward. This incentivizes actually tuning in live.
-
-**Frontend (`radio.html` + `site.js`):**
-- Add a small input + button UI below (or overlaid on) the radio player: `[ Enter code... ] [REDEEM]`
-- On submit, call `POST /api/economy/redeem-code` with `{ code: "XXXXX" }`
-- Show success (e.g., "+150 FT claimed!") or error ("Code invalid / already used") feedback
-- Refresh wallet on success via `window.loadUserProfile()`
-
-**Backend (`main.go` or new file):**
-- New table: `redeem_codes (code TEXT PK, reward_ft INT, max_uses INT, uses_so_far INT, expires_at TIMESTAMP)`
-- New table: `code_redemptions (user_id TEXT, code TEXT, redeemed_at TIMESTAMP, PRIMARY KEY(user_id, code))` — prevents double-dip
-- `POST /api/economy/redeem-code` endpoint: validate code exists, not expired, user hasn't redeemed it, uses < max_uses → credit FT, increment uses
-- Admin endpoint: `POST /api/admin/create-code` with `{ code, reward_ft, max_uses, expires_at }` to generate codes
-- Economy balance: keep codes in 50–300 FT range; daily is 250 FT so codes shouldn't trivially replace it
-
----
-
-### 3. More Incentive to Get Cards
+### 1. More Incentive to Get Cards
 
 Multiple angles — pick what fits the economy:
 
@@ -179,40 +197,19 @@ Multiple angles — pick what fits the economy:
 - Frontend: show progress bar in `catalog.html` with milestone markers; animate a reward modal on crossing thresholds
 - Backend: track `collection_milestones` table, check on every card unlock/shred
 
-**B. Duplicate Card Shred Bonus**
-- If a player already owns a card and pulls a duplicate, auto-shred gives a small bonus (e.g., +10% FT over base shred value)
-- Encourages pulling packs even when mostly complete
-
-**C. "Set Completion" Bonus**
+**B. "Set Completion" Bonus**
 - Owning all cards of a specific rarity tier in a season grants a special badge or FT bonus
 - Visible in catalog with a "COMPLETE" stamp UI treatment
 
-**D. Showcase / Profile Integration**
-- Let users display their rarest card on their leaderboard entry — social flex for collecting
+**C. Showcase / Profile Integration** *(backend implemented — `user_showcase` table, `/api/user/showcase` endpoints)*
+- Frontend integration: display showcase card on leaderboard entries
 - Adds status incentive without inflating FT economy
 
-**E. Card-Gated Features**
+**D. Card-Gated Features**
 - Small quality-of-life perks tied to card ownership (e.g., owning a player's card shows their stats badge in match history)
 - Non-economic incentive that doesn't break token balance
 
----
-
-### 4. Season 2 Pack Filter — Only Season 2 Cards Drop
-
-When Season 2 launches, packs should only drop Season 2 cards. The backend's `POST /api/economy/buy-pack` logic controls what card is minted.
-
-**Backend (`main.go`):**
-- The card selection query in `buy-pack` currently pulls from all available cards
-- Add a `current_pack_season` config (env var, DB setting, or admin endpoint) that the pack-opening logic reads
-- Filter the card pool: `WHERE season = $current_season` before the rarity-weighted random selection
-- Admin endpoint: `POST /api/admin/set-pack-season` with `{ season: "Season 2" }` to flip the active season
-- Keep old cards in the catalog/inventory — this only affects what *new* packs can drop
-
-**Frontend (`packs.html`):**
-- Display the active season name on the pack UI (e.g., "SEASON 2 PACKS" label under the case)
-- The filler cards in the spinner animation are cosmetic-only — no backend change needed there
-
-**Migration note:** Ensure Season 2 cards exist in the DB (`cards` table with `season = 'Season 2'`) before flipping the season, or buy-pack will return errors.
+**E. Suggest other Features**
 
 ---
 
@@ -220,7 +217,8 @@ When Season 2 launches, packs should only drop Season 2 cards. The backend's `PO
 
 - All pages share `site.js` for auth, wallet, and shared utilities
 - `premier.html` is the most visually polished page — use it as the design reference
-- Backend is a single large `main.go` file — search for endpoint strings (e.g., `"buy-pack"`) to find handler locations
+- Backend is split into domain files — search for endpoint strings (e.g., `"buy-pack"`) within the relevant domain file (`economy.go`, `radio.go`, etc.) to find handler locations; `main.go` is now only startup/globals
 - No build step for frontend — edit HTML/CSS/JS directly, hard-refresh to see changes
-- DB is SQLite at `server/fred-dev.db` — use standard SQLite tooling to inspect
+- DB is SQLite; path set via `DB_PATH` env var, defaults to `./database/fred.db` (relative to the `server/` directory)
+- Radio drop config lives in the `server_config` table (`radio_drop_enabled`, `radio_drop_min_interval`, `radio_drop_max_interval`, `radio_drop_window_sec`)
 - Version cache-bust: JS files use `?v=` query params (e.g., `site.js?v=mono8`) — increment when deploying changes

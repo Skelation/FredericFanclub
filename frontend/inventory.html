@@ -181,7 +181,10 @@
         
         <div id="modalCardDisplay"></div>
         
-        <button id="btnShred" class="shred-btn" onclick="shredCard()">SHRED CARD</button>
+        <div style="display: flex; gap: 12px; justify-content: center; margin-top: 0;">
+            <button id="btnShred" class="shred-btn" onclick="shredCard()">SHRED CARD</button>
+            <button id="btnShowcase" class="shred-btn" onclick="setShowcase()" style="background: rgba(0,212,255,0.1); border-color: rgba(0,212,255,0.4); color: #00d4ff;" title="Épingle cette carte sur le classement">🏆 SHOWCASE</button>
+        </div>
         <div id="shredMessage" style="margin-top: 15px; font-family: 'Rajdhani'; font-size: 1.2rem; color: #00ff64;"></div>
     </div>
 
@@ -360,6 +363,29 @@
                 msg.style.color = "#ff4655";
                 msg.textContent = "Network error.";
                 btnShred.disabled = false;
+            }
+        }
+
+        async function setShowcase() {
+            if (!currentModalCard) return;
+            const btn = document.getElementById('btnShowcase');
+            const msg = document.getElementById('shredMessage');
+            btn.disabled = true;
+            try {
+                const res = await fetch(`${getApiBase()}/api/user/showcase`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ card_id: currentModalCard.id })
+                });
+                const data = await res.json();
+                msg.style.color = res.ok ? '#00d4ff' : '#ff4655';
+                msg.textContent = res.ok ? `${currentModalCard.name} est maintenant ta carte vitrine !` : (data.error || 'Erreur.');
+            } catch {
+                msg.style.color = '#ff4655';
+                msg.textContent = 'Erreur réseau.';
+            } finally {
+                btn.disabled = false;
             }
         }
 

@@ -122,6 +122,148 @@
             transform: scale(1.2);
         }
 
+        /* Radio Drop Banner */
+        .drop-banner {
+            display: none;
+            margin-top: 2rem;
+            background: linear-gradient(135deg, rgba(255,70,85,0.15), rgba(255,170,0,0.1));
+            border: 1px solid rgba(255, 140, 0, 0.4);
+            border-radius: 8px;
+            padding: 1.2rem 1.5rem;
+            text-align: center;
+            animation: dropPulse 2s infinite;
+        }
+        .drop-banner.active { display: block; }
+        @keyframes dropPulse {
+            0%,100% { box-shadow: 0 0 0 rgba(255,140,0,0); }
+            50%      { box-shadow: 0 0 18px rgba(255,140,0,0.3); }
+        }
+        .drop-banner-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            color: #ffaa00;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            margin-bottom: 0.5rem;
+        }
+        .drop-banner-subtitle {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 1rem;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 1rem;
+        }
+        .drop-claim-btn {
+            background: rgba(255, 140, 0, 0.2);
+            border: 1px solid rgba(255, 140, 0, 0.6);
+            color: #ffaa00;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.8rem;
+            font-weight: 700;
+            padding: 0.6rem 1.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.2s;
+        }
+        .drop-claim-btn:hover:not(:disabled) { background: rgba(255,140,0,0.35); }
+        .drop-claim-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .drop-timer { font-family: 'Orbitron', sans-serif; font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 0.6rem; }
+
+        /* Captcha Modal */
+        .captcha-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.85);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .captcha-overlay.active { display: flex; }
+        .captcha-box {
+            background: #0d1428;
+            border: 1px solid rgba(0,212,255,0.25);
+            border-radius: 10px;
+            padding: 2rem;
+            max-width: 380px;
+            width: 90%;
+            text-align: center;
+        }
+        .captcha-box h3 {
+            font-family: 'Orbitron', sans-serif;
+            color: #ffaa00;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+        .captcha-box p {
+            font-family: 'Rajdhani', sans-serif;
+            color: rgba(255,255,255,0.6);
+            font-size: 0.95rem;
+            margin-bottom: 1.2rem;
+        }
+        .captcha-img {
+            display: block;
+            margin: 0 auto 0.8rem;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.1);
+            cursor: pointer;
+            max-width: 100%;
+        }
+        .captcha-audio-btn {
+            background: none;
+            border: 1px solid rgba(255,255,255,0.2);
+            color: rgba(255,255,255,0.5);
+            border-radius: 4px;
+            padding: 0.3rem 0.8rem;
+            font-size: 0.8rem;
+            cursor: pointer;
+            margin-bottom: 1rem;
+            transition: all 0.2s;
+        }
+        .captcha-audio-btn:hover { border-color: rgba(255,255,255,0.4); color: white; }
+        .captcha-input {
+            width: 100%;
+            box-sizing: border-box;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(0,212,255,0.3);
+            border-radius: 4px;
+            padding: 0.7rem 1rem;
+            color: #fff;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 1.1rem;
+            letter-spacing: 0.25em;
+            text-align: center;
+            outline: none;
+            margin-bottom: 1rem;
+        }
+        .captcha-submit-btn {
+            width: 100%;
+            background: rgba(255,140,0,0.2);
+            border: 1px solid rgba(255,140,0,0.5);
+            color: #ffaa00;
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 700;
+            padding: 0.8rem;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: all 0.2s;
+            margin-bottom: 0.6rem;
+        }
+        .captcha-submit-btn:hover:not(:disabled) { background: rgba(255,140,0,0.35); }
+        .captcha-submit-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+        .captcha-cancel-btn {
+            background: none; border: none; color: rgba(255,255,255,0.3);
+            font-family: 'Rajdhani', sans-serif; font-size: 0.9rem;
+            cursor: pointer; text-decoration: underline;
+        }
+        .captcha-msg { font-family: 'Rajdhani'; font-size: 0.95rem; margin-top: 0.5rem; min-height: 1.2em; }
+        .captcha-msg.error { color: #ff4655; }
+        .captcha-msg.success { color: #00ff64; }
+
         /* Queue List */
         .queue-container {
             margin-top: 3rem;
@@ -281,8 +423,30 @@
                     <ul id="queueList" class="queue-list">
                         </ul>
                 </div>
+
+                <div id="dropBanner" class="drop-banner">
+                    <div class="drop-banner-title">📻 Drop en direct !</div>
+                    <div id="dropSubtitle" class="drop-banner-subtitle">Un code secret est disponible</div>
+                    <button id="dropClaimBtn" class="drop-claim-btn">Réclamer mes FT</button>
+                    <div id="dropTimer" class="drop-timer"></div>
+                </div>
+
         </div>
     </section>
+
+    <!-- CAPTCHA Modal -->
+    <div id="captchaOverlay" class="captcha-overlay">
+        <div class="captcha-box">
+            <h3>🔊 Défi Radio</h3>
+            <p>Lis ou écoute le code ci-dessous et entre les chiffres pour réclamer tes FT.</p>
+            <img id="captchaImg" class="captcha-img" src="" alt="CAPTCHA" title="Clique pour rafraîchir">
+            <button id="captchaAudioBtn" class="captcha-audio-btn">🔊 Écouter l'audio</button>
+            <input type="text" id="captchaInput" class="captcha-input" placeholder="· · · · · ·" maxlength="10" autocomplete="off" inputmode="numeric">
+            <button id="captchaSubmitBtn" class="captcha-submit-btn">Valider</button>
+            <button id="captchaCancelBtn" class="captcha-cancel-btn">Annuler</button>
+            <div id="captchaMsg" class="captcha-msg"></div>
+        </div>
+    </div>
 
     <footer>
         <div class="container">
@@ -542,5 +706,193 @@
         }
     </script>
     <script src="js/site.js?v=mono2"></script>
+    <script>
+        // --- RADIO DROP + CAPTCHA SYSTEM ---
+        (function() {
+            const banner       = document.getElementById('dropBanner');
+            const subtitle     = document.getElementById('dropSubtitle');
+            const claimBtn     = document.getElementById('dropClaimBtn');
+            const timerEl      = document.getElementById('dropTimer');
+            const overlay      = document.getElementById('captchaOverlay');
+            const captchaImg   = document.getElementById('captchaImg');
+            const audioBtn     = document.getElementById('captchaAudioBtn');
+            const captchaInput = document.getElementById('captchaInput');
+            const submitBtn    = document.getElementById('captchaSubmitBtn');
+            const cancelBtn    = document.getElementById('captchaCancelBtn');
+            const captchaMsg   = document.getElementById('captchaMsg');
+
+            let currentDrop = null;      // { drop_id, reward_ft, expires_in }
+            let currentCaptchaID = null;
+            let timerInterval = null;
+            let pollInterval = null;
+            let audioEl = null;
+            let lastSeenDropID = null;   // tracks drop_id across polls to detect new ones
+            let audioCtx = null;
+
+            function getAudioCtx() {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                return audioCtx;
+            }
+
+            function playDropChime() {
+                try {
+                    const ctx = getAudioCtx();
+                    // C5 – E5 – G5, each 180ms apart, slightly detuned for warmth
+                    [[523.25, 0], [659.25, 0.18], [783.99, 0.36]].forEach(([freq, delay]) => {
+                        const osc  = ctx.createOscillator();
+                        const gain = ctx.createGain();
+                        osc.connect(gain);
+                        gain.connect(ctx.destination);
+                        osc.type = 'sine';
+                        osc.frequency.value = freq;
+                        const t = ctx.currentTime + delay;
+                        gain.gain.setValueAtTime(0, t);
+                        gain.gain.linearRampToValueAtTime(0.35, t + 0.04);
+                        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+                        osc.start(t);
+                        osc.stop(t + 0.55);
+                    });
+                } catch (e) {}
+            }
+
+            function setMsg(text, type) {
+                captchaMsg.textContent = text;
+                captchaMsg.className = 'captcha-msg ' + (type || '');
+            }
+
+            function updateTimer(expiresIn) {
+                clearInterval(timerInterval);
+                let remaining = expiresIn;
+                timerEl.textContent = `Expire dans ${remaining}s`;
+                timerInterval = setInterval(() => {
+                    remaining--;
+                    if (remaining <= 0) {
+                        clearInterval(timerInterval);
+                        hideBanner();
+                        pollDrop(); // recheck immediately
+                    } else {
+                        timerEl.textContent = `Expire dans ${remaining}s`;
+                    }
+                }, 1000);
+            }
+
+            function showBanner(drop) {
+                currentDrop = drop;
+                subtitle.textContent = `+${drop.reward_ft} FT disponibles — prouve que tu écoutes !`;
+                claimBtn.disabled = drop.already_claimed;
+                claimBtn.textContent = drop.already_claimed ? 'Déjà réclamé ✓' : 'Réclamer mes FT';
+                banner.classList.add('active');
+                updateTimer(drop.expires_in);
+            }
+
+            function hideBanner() {
+                banner.classList.remove('active');
+                currentDrop = null;
+                clearInterval(timerInterval);
+                timerEl.textContent = '';
+            }
+
+            async function pollDrop() {
+                try {
+                    const res = await fetch(getApiBase() + '/api/radio/active-drop', { credentials: 'include' });
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (data.active) {
+                        const isNew = data.drop_id !== lastSeenDropID;
+                        lastSeenDropID = data.drop_id;
+                        showBanner(data);
+                        if (isNew) playDropChime();
+                    } else {
+                        hideBanner();
+                    }
+                } catch {}
+            }
+
+            async function openCaptcha() {
+                if (!currentDrop) return;
+                claimBtn.disabled = true;
+                captchaInput.value = '';
+                setMsg('');
+                try {
+                    const res = await fetch(
+                        `${getApiBase()}/api/radio/captcha/new?drop_id=${currentDrop.drop_id}`,
+                        { credentials: 'include' }
+                    );
+                    const data = await res.json();
+                    if (!res.ok) { setMsg(data.error || 'Erreur', 'error'); claimBtn.disabled = false; return; }
+                    currentCaptchaID = data.captcha_id;
+                    captchaImg.src = getApiBase() + data.image_url;
+                    overlay.classList.add('active');
+                    captchaInput.focus();
+                } catch { claimBtn.disabled = false; }
+            }
+
+            function refreshCaptchaImage() {
+                // Force image reload by appending timestamp
+                captchaImg.src = captchaImg.src.split('?')[0] + '?' + Date.now();
+            }
+
+            async function submitCaptcha() {
+                const solution = captchaInput.value.trim();
+                if (!solution || !currentCaptchaID) return;
+                submitBtn.disabled = true;
+                setMsg('Vérification...', '');
+                try {
+                    const res = await fetch(getApiBase() + '/api/radio/claim', {
+                        method: 'POST', credentials: 'include',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ captcha_id: currentCaptchaID, solution })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) {
+                        setMsg(data.error || 'Erreur', 'error');
+                        submitBtn.disabled = false;
+                        // Refresh image for new attempt (solution was wrong but captcha may still be valid)
+                    } else {
+                        setMsg(`+${data.reward_ft} FT réclamés !`, 'success');
+                        if (window.loadUserProfile) window.loadUserProfile();
+                        setTimeout(() => {
+                            overlay.classList.remove('active');
+                            claimBtn.textContent = 'Déjà réclamé ✓';
+                            claimBtn.disabled = true;
+                        }, 1500);
+                    }
+                } catch {
+                    setMsg('Erreur réseau.', 'error');
+                    submitBtn.disabled = false;
+                }
+            }
+
+            // Unlock AudioContext on first interaction (browser requirement)
+            document.addEventListener('click', () => { try { getAudioCtx().resume(); } catch(e){} }, { once: true });
+
+            claimBtn.addEventListener('click', openCaptcha);
+
+            captchaImg.addEventListener('click', () => {
+                // Clicking image regenerates a new captcha
+                openCaptcha();
+            });
+
+            audioBtn.addEventListener('click', () => {
+                if (!currentCaptchaID) return;
+                if (audioEl) { audioEl.pause(); audioEl = null; }
+                audioEl = new Audio(getApiBase() + `/api/radio/captcha/audio/${currentCaptchaID}`);
+                audioEl.play();
+            });
+
+            submitBtn.addEventListener('click', submitCaptcha);
+            captchaInput.addEventListener('keydown', e => { if (e.key === 'Enter') submitCaptcha(); });
+
+            cancelBtn.addEventListener('click', () => {
+                overlay.classList.remove('active');
+                claimBtn.disabled = false;
+                currentCaptchaID = null;
+            });
+
+            // Poll every 20 seconds
+            pollDrop();
+            pollInterval = setInterval(pollDrop, 20000);
+        })();
+    </script>
 </body>
 </html>

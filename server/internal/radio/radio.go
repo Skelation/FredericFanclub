@@ -47,7 +47,7 @@ func StartRadioDropScheduler() {
 
 			minInterval := db.GetServerConfigInt("radio_drop_min_interval", 30)
 			maxInterval := db.GetServerConfigInt("radio_drop_max_interval", 60)
-			windowSec := db.GetServerConfigInt("radio_drop_window_sec", 300)
+			windowSec := db.GetServerConfigInt("radio_drop_window_sec", 120)
 			now := time.Now().UTC()
 
 			var lastRevealAt string
@@ -130,7 +130,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			req.MaxUses = 1
 		}
 		if req.WindowSeconds <= 0 {
-			req.WindowSeconds = 420
+			req.WindowSeconds = 60
 		}
 		if req.RevealAt == "" {
 			req.RevealAt = time.Now().UTC().Format(time.RFC3339)
@@ -339,7 +339,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 
 		rawDropID, ok := captchaDropMap.LoadAndDelete(req.CaptchaID)
 		if !ok {
-			http.Error(w, `{"error": "Session expirée — génère un nouveau défi"}`, http.StatusBadRequest)
+			http.Error(w, `{"error": "Session expirée — génère un nouveau captcha"}`, http.StatusBadRequest)
 			return
 		}
 		dropID := rawDropID.(int)
@@ -363,7 +363,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			return
 		}
 		if usesSoFar >= maxUses {
-			http.Error(w, `{"error": "Drop entièrement réclamé"}`, http.StatusBadRequest)
+			http.Error(w, `{"error": "Drop déjà réclamé"}`, http.StatusBadRequest)
 			return
 		}
 

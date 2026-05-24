@@ -101,7 +101,7 @@
         .rank-1 .rank-number { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.8); }
         .rank-1 .player-avatar { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
         .rank-1 .player-name { color: #ffd700; }
-        
+
         .rank-2 .rank-number { color: #c0c0c0; text-shadow: 0 0 10px rgba(192, 192, 192, 0.8); }
         .rank-2 .player-avatar { border-color: #c0c0c0; }
         .rank-2 .player-name { color: #c0c0c0; }
@@ -109,6 +109,48 @@
         .rank-3 .rank-number { color: #cd7f32; text-shadow: 0 0 10px rgba(205, 127, 50, 0.8); }
         .rank-3 .player-avatar { border-color: #cd7f32; }
         .rank-3 .player-name { color: #cd7f32; }
+
+        /* --- BADGES --- */
+        .player-badges {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+            margin-left: 6px;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            font-size: 0.75rem;
+            cursor: default;
+            border: 1px solid transparent;
+            transition: transform 0.15s;
+        }
+        .badge:hover { transform: scale(1.25); }
+        .badge-bet5  { background: rgba(205,127,50,.2); border-color: #cd7f32; }
+        .badge-bet10 { background: rgba(192,192,192,.2); border-color: #c0c0c0; }
+        .badge-bet25 { background: rgba(255,215,0,.2);   border-color: #ffd700; }
+        .badge-season { background: rgba(180,137,255,.2); border-color: #b489ff; }
+
+        /* --- SHOWCASE CARD --- */
+        .player-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .showcase-thumb {
+            width: 32px;
+            height: 44px;
+            object-fit: cover;
+            border-radius: 3px;
+            border: 1px solid rgba(255,255,255,0.15);
+            transition: transform 0.2s;
+            cursor: pointer;
+        }
+        .showcase-thumb:hover { transform: scale(2.5) translateX(-20px); z-index: 10; position: relative; }
 
     </style>
 <body>
@@ -188,6 +230,22 @@
     <script>
         let tabsBuilt = false;
 
+        const BADGE_META = {
+            bet_wins_5:  { cls: 'badge-bet5',  icon: '🎲', title: '5 paris gagnés' },
+            bet_wins_10: { cls: 'badge-bet10', icon: '🎯', title: '10 paris gagnés' },
+            bet_wins_25: { cls: 'badge-bet25', icon: '👑', title: '25 paris gagnés' },
+        };
+
+        function renderBadges(badges) {
+            if (!badges || badges.length === 0) return '';
+            return '<div class="player-badges">' + badges.map(b => {
+                const meta = BADGE_META[b];
+                if (meta) return `<span class="badge ${meta.cls}" title="${meta.title}">${meta.icon}</span>`;
+                if (b.startsWith('season_complete_')) return `<span class="badge badge-season" title="Saison complétée">🃏</span>`;
+                return '';
+            }).join('') + '</div>';
+        }
+
         function renderBoard(users, targetElement, suffix) {
             if (!users || users.length === 0) {
                 targetElement.innerHTML = `<p style="text-align: center; color: #888;">No players found.</p>`;
@@ -197,14 +255,22 @@
                 const rank = index + 1;
                 const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
                 const scoreFormatted = Math.round(user.score).toLocaleString();
+                const badgesHtml = renderBadges(user.badges);
+                const showcaseHtml = user.showcase_card
+                    ? `<img src="${user.showcase_card.image_url}" class="showcase-thumb" title="${user.showcase_card.name} (${user.showcase_card.rarity})" alt="Showcase">`
+                    : '';
                 return `
                     <div class="board-row ${rankClass}">
                         <div class="player-info">
                             <span class="rank-number">#${rank}</span>
                             <img src="${user.avatar}" class="player-avatar" alt="Avatar">
                             <span class="player-name">${user.username}</span>
+                            ${badgesHtml}
                         </div>
-                        <span class="player-score">${scoreFormatted} ${suffix}</span>
+                        <div class="player-right">
+                            ${showcaseHtml}
+                            <span class="player-score">${scoreFormatted} ${suffix}</span>
+                        </div>
                     </div>`;
             }).join('');
         }
