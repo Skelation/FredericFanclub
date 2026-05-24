@@ -12,6 +12,58 @@ import (
 	"time" // Added time package
 )
 
+// --- ALIAS / REASSIGNMENT CONFIG ---
+
+type AliasEntry struct {
+	Ingame string `json:"ingame"`
+	Player string `json:"player"`
+}
+
+type ReassignmentEntry struct {
+	MatchID string `json:"match_id"`
+	Ingame  string `json:"ingame"`
+	Player  string `json:"player"`
+}
+
+func loadAliasEntries() []AliasEntry {
+	data, err := os.ReadFile("./data/premier/aliases.json")
+	if err != nil {
+		return nil
+	}
+	var entries []AliasEntry
+	json.Unmarshal(data, &entries)
+	return entries
+}
+
+func loadReassignmentEntries() []ReassignmentEntry {
+	data, err := os.ReadFile("./data/premier/reassignments.json")
+	if err != nil {
+		return nil
+	}
+	var entries []ReassignmentEntry
+	json.Unmarshal(data, &entries)
+	return entries
+}
+
+func buildAliasMap(entries []AliasEntry) map[string]string {
+	m := make(map[string]string, len(entries))
+	for _, e := range entries {
+		m[e.Ingame] = e.Player
+	}
+	return m
+}
+
+func buildReassignmentIndex(entries []ReassignmentEntry) map[string]map[string]string {
+	idx := make(map[string]map[string]string)
+	for _, e := range entries {
+		if idx[e.MatchID] == nil {
+			idx[e.MatchID] = make(map[string]string)
+		}
+		idx[e.MatchID][e.Ingame] = e.Player
+	}
+	return idx
+}
+
 // --- JSON INPUT STRUCTURES ---
 type MatchData struct {
 	Metadata struct {
@@ -155,11 +207,8 @@ func GenerateTeamStats(targetPlayers []string) {
 	cutoffUnix := cutoffDate.Unix()
 	// -------------------------
 
-	// --- 1. ADD YOUR ALIASES HERE ---
-	aliasMap := map[string]string{
-		"Cailloux#BOT": "Riboox", 
-	}
-	// --------------------------------
+	globalAliases := buildAliasMap(loadAliasEntries())
+	matchReassignments := buildReassignmentIndex(loadReassignmentEntries())
 
 	playerAggregates := make(map[string]aggPlayerStats)
 	teamMapRates := make(map[string]MapStats)
@@ -177,6 +226,7 @@ func GenerateTeamStats(targetPlayers []string) {
 
 	type fileInfo struct {
 		Path      string
+		MatchID   string
 		GameStart int64
 	}
 	var validFiles []fileInfo
@@ -185,6 +235,7 @@ func GenerateTeamStats(targetPlayers []string) {
 		if !strings.HasSuffix(f.Name(), ".json") {
 			continue
 		}
+		matchID := strings.TrimSuffix(f.Name(), ".json")
 		path := filepath.Join(archiveDir, f.Name())
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -195,6 +246,7 @@ func GenerateTeamStats(targetPlayers []string) {
 		if err := json.Unmarshal(data, &peek); err == nil {
 			validFiles = append(validFiles, fileInfo{
 				Path:      path,
+				MatchID:   matchID,
 				GameStart: peek.Metadata.GameStart,
 			})
 		}
@@ -226,16 +278,23 @@ func GenerateTeamStats(targetPlayers []string) {
 			continue
 		}
 
+		// Build effective alias map: global aliases + match-specific overrides
+		effectiveAliases := make(map[string]string, len(globalAliases))
+		for k, v := range globalAliases {
+			effectiveAliases[k] = v
+		}
+		for k, v := range matchReassignments[fInfo.MatchID] {
+			effectiveAliases[k] = v
+		}
+
 		teamCounts := make(map[string]int)
 		playerTeams := make(map[string]string)
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
 
-			// --- 2. APPLY ALIAS FOR TEAM DETECTION ---
-			if alias, exists := aliasMap[fullName]; exists {
+			if alias, exists := effectiveAliases[fullName]; exists {
 				fullName = alias
 			}
-			// -----------------------------------------
 
 			playerTeams[p.PUUID] = p.Team
 			if isTarget(fullName, targetPlayers) {
@@ -367,11 +426,9 @@ func GenerateTeamStats(targetPlayers []string) {
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
 
-			// --- 3. APPLY ALIAS FOR STAT CALCULATION ---
-			if alias, exists := aliasMap[fullName]; exists {
+			if alias, exists := effectiveAliases[fullName]; exists {
 				fullName = alias
 			}
-			// -------------------------------------------
 
 			if !isTarget(fullName, targetPlayers) {
 				continue

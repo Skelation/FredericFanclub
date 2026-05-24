@@ -8,15 +8,56 @@
         .admin-box { background: #222; padding: 30px; border-radius: 8px; max-width: 400px; }
         input, select, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
         button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; }
+
+        /* User search dropdown */
+        .search-wrap { position: relative; margin-bottom: 15px; }
+        .search-wrap input { margin-bottom: 0; }
+        #userDropdown {
+            display: none;
+            position: absolute;
+            top: 100%;
+            left: 0; right: 0;
+            background: #2a2a2a;
+            border: 1px solid #555;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 220px;
+            overflow-y: auto;
+            z-index: 100;
+        }
+        .user-opt {
+            padding: 9px 12px;
+            cursor: pointer;
+            border-bottom: 1px solid #383838;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .user-opt:last-child { border-bottom: none; }
+        .user-opt:hover { background: #3a3a3a; }
+        .user-opt .uid { color: #888; font-size: 0.78rem; font-family: monospace; }
     </style>
 </head>
 <body>
 
+    <!-- Datalists must be in the HTML so browsers associate them with inputs at render time -->
+    <datalist id="rosterSuggestions">
+        <option value="Heri#BLUB">
+        <option value="TheMisterED#0007">
+        <option value="Graussbyt#5629">
+        <option value="hhj#8769">
+        <option value="Djibはコリーヌ お あいして#LoVe">
+        <option value="Lal6s9gne#6641">
+        <option value="Riboox">
+        <option value="小胖子vincent#4397">
+    </datalist>
+    <datalist id="ingameSuggestions"></datalist>
+
     <div class="admin-box">
         <h2>Add Trading Card</h2>
-        
+
         <label>Admin Password:</label>
-        <input type="password" id="adminToken" placeholder="Enter FRED_ADMIN_TOKEN">
+        <input type="password" id="adminToken" placeholder="Enter FRED_ADMIN_TOKEN" onblur="onTokenEntered()">
 
         <label>Card Name:</label>
         <input type="text" id="cardName" placeholder="e.g. Graussbyt Base">
@@ -31,57 +72,64 @@
             <option value="radiant">Radiant</option>
         </select>
 
-            <label>Season:</label>
-            <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
+        <label>Season:</label>
+        <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
         <label>Image URL:</label>
         <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
 
         <button onclick="addCard()">Add to Database</button>
         <p id="statusMsg"></p>
-            <hr style="border-color: #444; margin: 30px 0;">
+        <hr style="border-color: #444; margin: 30px 0;">
 
-            <h2>Central Bank (Mint Tokens)</h2>
+        <h2>Central Bank (Mint Tokens)</h2>
 
-            <label>User Discord ID:</label>
-            <input type="text" id="targetDiscordId" placeholder="e.g. 123456789012345678">
+        <label>Search User:</label>
+        <div class="search-wrap">
+            <input type="text" id="userSearch" placeholder="Type a username..." oninput="filterUsers(this.value)" onfocus="filterUsers(this.value)" autocomplete="off">
+            <div id="userDropdown"></div>
+        </div>
 
-            <label>Amount to Give (Can be negative to remove!):</label>
-            <input type="number" id="tokenAmount" placeholder="5000">
+        <label>User Discord ID:</label>
+        <input type="text" id="targetDiscordId" placeholder="e.g. 123456789012345678">
 
-            <button onclick="giveTokens()" style="background: #2bc97e;">Grant Fredtokens</button>
-            <p id="tokenStatusMsg"></p>
-            <hr style="border-color: #444; margin: 30px 0;">
+        <label>Amount to Give (Can be negative to remove!):</label>
+        <input type="number" id="tokenAmount" placeholder="5000">
+
+        <button onclick="giveTokens()" style="background: #2bc97e;">Grant Fredtokens</button>
+        <p id="tokenStatusMsg"></p>
+        <hr style="border-color: #444; margin: 30px 0;">
 
         <h2>Manage Cards (Delete)</h2>
         <button onclick="fetchAdminCards()" style="background: #b489ff;">Load Card Catalog</button>
-        
+
         <div id="adminCardList" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
-        
+
         <p id="deleteStatusMsg"></p>
-            <hr style="border-color: #444; margin: 30px 0;">
-<h2>Schedule Upcoming Match</h2>
+        <hr style="border-color: #444; margin: 30px 0;">
 
-<label>Opponent Name:</label>
-<input type="text" id="matchOpponent" placeholder="e.g. NOVA">
+        <h2>Schedule Upcoming Match</h2>
 
-<label>Opponent Tag:</label>
-<input type="text" id="matchTag" placeholder="e.g. #NV">
+        <label>Opponent Name:</label>
+        <input type="text" id="matchOpponent" placeholder="e.g. NOVA">
 
-<label>Date & Time:</label>
-<input type="datetime-local" id="matchTime">
+        <label>Opponent Tag:</label>
+        <input type="text" id="matchTag" placeholder="e.g. #NV">
 
-<label>Format:</label>
-<select id="matchFormat">
-    <option value="BO1 — Premier">BO1 — Premier</option>
-    <option value="BO3 — Premier">BO3 — Premier</option>
-    <option value="Playoffs">Playoffs</option>
-</select>
+        <label>Date & Time:</label>
+        <input type="datetime-local" id="matchTime">
 
-<label>Map(s):</label>
-<input type="text" id="matchMaps" placeholder="e.g. Ascent or Ascent, Haven, Split">
+        <label>Format:</label>
+        <select id="matchFormat">
+            <option value="BO1 — Premier">BO1 — Premier</option>
+            <option value="BO3 — Premier">BO3 — Premier</option>
+            <option value="Playoffs">Playoffs</option>
+        </select>
 
-<button onclick="scheduleMatch()" style="background: #ffb01f;">Schedule Match</button>
-<p id="matchStatusMsg"></p>
+        <label>Map(s):</label>
+        <input type="text" id="matchMaps" placeholder="e.g. Ascent or Ascent, Haven, Split">
+
+        <button onclick="scheduleMatch()" style="background: #ffb01f;">Schedule Match</button>
+        <p id="matchStatusMsg"></p>
 
         <hr style="border-color: #444; margin: 30px 0;">
 
@@ -93,9 +141,40 @@
 
         <button onclick="setPackSeason()" style="background: #ff4655;">Set Active Season</button>
         <p id="seasonStatusMsg"></p>
+
+        <hr style="border-color: #444; margin: 30px 0;">
+
+        <h2>Premier — Player Aliases</h2>
+        <p style="color:#aaa;font-size:0.9rem;">Map any in-game name to a canonical team player. Applied to every match.</p>
+
+        <label>In-Game Name (e.g. Cailloux#BOT):</label>
+        <input type="text" id="aliasIngame" placeholder="Name#Tag" list="ingameSuggestions">
+
+        <label>Canonical Player Name:</label>
+        <input type="text" id="aliasPlayer" placeholder="e.g. Riboox" list="rosterSuggestions">
+
+        <div style="display:flex;gap:8px;">
+            <button onclick="addAlias()" style="background:#00d4ff;">Add / Update Alias</button>
+            <button onclick="loadAliasesList()" style="background:#555;">Load Current</button>
+        </div>
+        <p id="aliasStatusMsg"></p>
+        <div id="aliasList" style="margin-top:10px;"></div>
+
+        <hr style="border-color: #444; margin: 30px 0;">
+
+        <h2>Premier — Match Reassignment</h2>
+        <p style="color:#aaa;font-size:0.9rem;">Attribute one player's performance in a specific match to a different team player.</p>
+
+        <button onclick="loadPremierMatches()" style="background:#b489ff;">Load Matches</button>
+        <select id="matchSelector" style="margin-top:8px;" onchange="onMatchSelected()">
+            <option value="">Select a match...</option>
+        </select>
+
+        <div id="matchReassignPanel" style="margin-top:14px;"></div>
+        <p id="reassignStatusMsg"></p>
     </div>
 
-        <script>
+    <script>
         function getApiBase() {
             if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
                 return "http://localhost:8080";
@@ -103,6 +182,7 @@
             return "https://api.fredericfan.club";
         }
 
+        // ── Card ─────────────────────────────────────────────────────────────
         async function addCard() {
             const btn = document.querySelector('button');
             const msg = document.getElementById('statusMsg');
@@ -120,40 +200,74 @@
 
                 const response = await fetch(`${getApiBase()}/api/admin/cards`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Admin-Token': token
-                    },
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
                     body: JSON.stringify(data)
                 });
 
-                // First, check if the response is actually JSON before trying to parse it!
                 const contentType = response.headers.get("content-type");
                 let result;
                 if (contentType && contentType.indexOf("application/json") !== -1) {
                     result = await response.json();
                 } else {
-                    // If it's not JSON, grab the plain text so we can see the error
                     const textError = await response.text();
                     throw new Error(`Server returned non-JSON: ${textError}`);
                 }
-                
+
                 if (response.ok) {
                     msg.style.color = "lime";
                     msg.innerText = "Success! Card ID: " + result.card_id;
-                    document.getElementById('cardName').value = ''; 
+                    document.getElementById('cardName').value = '';
                 } else {
                     msg.style.color = "red";
                     msg.innerText = "Error: " + (result.error || "Unknown server error");
                 }
             } catch (error) {
-                console.error(error);
                 msg.style.color = "red";
                 msg.innerText = "Fetch Error: " + error.message;
             } finally {
                 btn.innerText = "Add to Database";
             }
         }
+
+        // ── Mint Tokens — user search dropdown ───────────────────────────────
+        let _usersCache = [];
+
+        async function loadUsersForMint() {
+            const token = document.getElementById('adminToken').value;
+            if (!token) return;
+            const res = await fetch(`${getApiBase()}/api/admin/users`, {
+                headers: { 'X-Admin-Token': token }
+            });
+            if (res.ok) _usersCache = (await res.json()) || [];
+        }
+
+        function filterUsers(query) {
+            const dd = document.getElementById('userDropdown');
+            const q = (query || '').trim().toLowerCase();
+            if (!q) { dd.style.display = 'none'; return; }
+            const matches = _usersCache.filter(u =>
+                (u.Username || '').toLowerCase().includes(q) || (u.DiscordID || '').includes(q)
+            ).slice(0, 8);
+            if (!matches.length) { dd.style.display = 'none'; return; }
+            dd.innerHTML = matches.map(u => `
+                <div class="user-opt" onclick="selectUser('${u.DiscordID}','${(u.Username||'').replace(/'/g,"\\'")}')">
+                    <span>${u.Username || '—'}</span>
+                    <span class="uid">${u.DiscordID}</span>
+                </div>`).join('');
+            dd.style.display = 'block';
+        }
+
+        function selectUser(discordId, username) {
+            document.getElementById('targetDiscordId').value = discordId;
+            document.getElementById('userSearch').value = username;
+            document.getElementById('userDropdown').style.display = 'none';
+        }
+
+        document.addEventListener('click', e => {
+            if (!e.target.closest('.search-wrap')) {
+                document.getElementById('userDropdown').style.display = 'none';
+            }
+        });
 
         async function giveTokens() {
             const token = document.getElementById('adminToken').value;
@@ -164,124 +278,106 @@
 
             const response = await fetch(`${getApiBase()}/api/admin/tokens`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Admin-Token': token
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
                 body: JSON.stringify(data)
             });
 
             const result = await response.json();
             const msg = document.getElementById('tokenStatusMsg');
-            
+
             if (response.ok) {
                 msg.style.color = "lime";
                 msg.innerText = result.message;
-                document.getElementById('targetDiscordId').value = ''; 
+                document.getElementById('targetDiscordId').value = '';
+                document.getElementById('userSearch').value = '';
                 document.getElementById('tokenAmount').value = '';
             } else {
                 msg.style.color = "red";
                 msg.innerText = "Error: " + result.error;
             }
         }
+
+        // ── Cards catalog ─────────────────────────────────────────────────────
         async function fetchAdminCards() {
-            // Reusing the catalog route to get the master list of cards!
             const res = await fetch(`${getApiBase()}/api/catalog`);
             const list = document.getElementById('adminCardList');
-            
             if (res.ok) {
                 const cards = await res.json();
-                
                 if (!cards || cards.length === 0) {
                     list.innerHTML = "<p style='color: #888;'>No cards found.</p>";
                     return;
                 }
-
-                // Build a nice UI list with a red Delete button for each card
                 list.innerHTML = cards.map(c => `
                     <div style="display: flex; justify-content: space-between; align-items: center; background: #333; padding: 10px; margin-bottom: 5px; border-radius: 4px;">
                         <div style="display: flex; align-items: center; gap: 10px;">
                             <img src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
                             <div>
-                                <strong style="color: white;">[#${c.id}] ${c.name}</strong> <br>
+                                <strong style="color: white;">[#${c.id}] ${c.name}</strong><br>
                                 <span style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">${c.rarity}</span>
                             </div>
                         </div>
                         <button onclick="deleteCard(${c.id})" style="background: #ff4655; color: white; padding: 5px 10px; width: auto; margin: 0; font-size: 0.9rem;">Delete</button>
-                    </div>
-                `).join('');
+                    </div>`).join('');
             }
         }
 
         async function deleteCard(cardId) {
-            // Extra safety check so you don't accidentally click it
             if (!confirm(`Are you SURE you want to delete Card #${cardId}?\nThis will destroy it and remove it from every player's inventory permanently.`)) return;
-
             const token = document.getElementById('adminToken').value;
             const msg = document.getElementById('deleteStatusMsg');
-
             const res = await fetch(`${getApiBase()}/api/admin/delete-card`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Admin-Token': token
-                },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
                 body: JSON.stringify({ card_id: cardId })
             });
-
             const result = await res.json();
-            
             if (res.ok) {
                 msg.style.color = "lime";
                 msg.innerText = result.message;
-                fetchAdminCards(); // Refresh the list so the deleted card disappears
+                fetchAdminCards();
             } else {
                 msg.style.color = "red";
                 msg.innerText = "Error: " + result.error;
             }
         }
+
+        // ── Schedule match ────────────────────────────────────────────────────
         async function scheduleMatch() {
-    const msg = document.getElementById('matchStatusMsg');
-    const token = document.getElementById('adminToken').value;
-
-    const data = {
-        opponent: document.getElementById('matchOpponent').value,
-        tag: document.getElementById('matchTag').value,
-        time: document.getElementById('matchTime').value,
-        format: document.getElementById('matchFormat').value,
-        maps: document.getElementById('matchMaps').value
-    };
-
-    try {
-        const response = await fetch(`${getApiBase()}/api/admin/schedule-match`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Admin-Token': token
-            },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-        if (response.ok) {
-            msg.style.color = "lime";
-            msg.innerText = "Match scheduled successfully!";
-        } else {
-            msg.style.color = "red";
-            msg.innerText = "Error: " + result.error;
+            const msg = document.getElementById('matchStatusMsg');
+            const token = document.getElementById('adminToken').value;
+            const data = {
+                opponent: document.getElementById('matchOpponent').value,
+                tag: document.getElementById('matchTag').value,
+                time: document.getElementById('matchTime').value,
+                format: document.getElementById('matchFormat').value,
+                maps: document.getElementById('matchMaps').value
+            };
+            try {
+                const response = await fetch(`${getApiBase()}/api/admin/schedule-match`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msg.style.color = "lime";
+                    msg.innerText = "Match scheduled successfully!";
+                } else {
+                    msg.style.color = "red";
+                    msg.innerText = "Error: " + result.error;
+                }
+            } catch (error) {
+                msg.style.color = "red";
+                msg.innerText = "Fetch Error: " + error.message;
+            }
         }
-    } catch (error) {
-        msg.style.color = "red";
-        msg.innerText = "Fetch Error: " + error.message;
-    }
-}
+
+        // ── Pack season ───────────────────────────────────────────────────────
         async function setPackSeason() {
             const token = document.getElementById('adminToken').value;
             const season = document.getElementById('newSeasonName').value.trim();
             const msg = document.getElementById('seasonStatusMsg');
-
             if (!season) { msg.style.color = 'red'; msg.innerText = 'Season name cannot be empty.'; return; }
-
             const res = await fetch(`${getApiBase()}/api/admin/set-pack-season`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
@@ -297,6 +393,192 @@
                 msg.style.color = 'red';
                 msg.innerText = 'Error: ' + result.error;
             }
+        }
+
+        // ── Called once when the admin password field loses focus ─────────────
+        async function onTokenEntered() {
+            await Promise.all([
+                loadUsersForMint(),
+                loadIngameSuggestions()
+            ]);
+        }
+
+        // ── Premier — in-game suggestions (from archive) ──────────────────────
+        async function loadIngameSuggestions() {
+            const token = document.getElementById('adminToken').value;
+            if (!token) return;
+            const res = await fetch(`${getApiBase()}/api/admin/premier/matches`, {
+                headers: { 'X-Admin-Token': token }
+            });
+            if (!res.ok) return;
+            const matches = await res.json() || [];
+            const seen = new Set();
+            matches.forEach(m => (m.players || []).forEach(p => seen.add(p.full)));
+            const dl = document.getElementById('ingameSuggestions');
+            dl.innerHTML = [...seen].sort().map(v => `<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+        }
+
+        // ── Premier Aliases ───────────────────────────────────────────────────
+        async function addAlias() {
+            const ingame = document.getElementById('aliasIngame').value.trim();
+            const player = document.getElementById('aliasPlayer').value.trim();
+            const msg = document.getElementById('aliasStatusMsg');
+            if (!ingame || !player) { msg.style.color='red'; msg.innerText='Both fields are required.'; return; }
+            const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                body: JSON.stringify({ ingame, player })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? result.message : ('Error: ' + result.error);
+            if (res.ok) {
+                document.getElementById('aliasIngame').value = '';
+                document.getElementById('aliasPlayer').value = '';
+                loadAliasesList();
+            }
+        }
+
+        async function removeAlias(ingame) {
+            const msg = document.getElementById('aliasStatusMsg');
+            const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                body: JSON.stringify({ ingame })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? result.message : ('Error: ' + result.error);
+            if (res.ok) loadAliasesList();
+        }
+
+        async function loadAliasesList() {
+            const container = document.getElementById('aliasList');
+            const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
+                headers: { 'X-Admin-Token': document.getElementById('adminToken').value }
+            });
+            if (!res.ok) { container.innerHTML = '<p style="color:red;">Failed to load.</p>'; return; }
+            const entries = await res.json();
+            if (!entries || entries.length === 0) {
+                container.innerHTML = '<p style="color:#888;">No aliases defined.</p>';
+                return;
+            }
+            container.innerHTML = `
+                <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+                    <thead><tr style="color:#00d4ff;">
+                        <th style="text-align:left;padding:6px;">In-Game Name</th>
+                        <th style="text-align:left;padding:6px;">→ Canonical Player</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody>${entries.map(e => `
+                        <tr style="border-top:1px solid #333;">
+                            <td style="padding:6px;color:#fff;">${e.ingame}</td>
+                            <td style="padding:6px;color:#2bc97e;">${e.player}</td>
+                            <td style="padding:6px;">
+                                <button onclick="removeAlias('${e.ingame.replace(/'/g,"\\'")}')" style="background:#ff4655;color:white;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Remove</button>
+                            </td>
+                        </tr>`).join('')}
+                    </tbody>
+                </table>`;
+        }
+
+        // ── Premier Match Reassignment ────────────────────────────────────────
+        let _currentMatches = [];
+        let _allReassignments = [];
+
+        async function loadPremierMatches() {
+            const sel = document.getElementById('matchSelector');
+            const token = document.getElementById('adminToken').value;
+            const res = await fetch(`${getApiBase()}/api/admin/premier/matches`, {
+                headers: { 'X-Admin-Token': token }
+            });
+            if (!res.ok) { document.getElementById('reassignStatusMsg').innerText = 'Failed to load matches.'; return; }
+            _currentMatches = await res.json();
+
+            // Refresh in-game suggestions with the freshly loaded match data
+            const seen = new Set();
+            _currentMatches.forEach(m => (m.players || []).forEach(p => seen.add(p.full)));
+            const dl = document.getElementById('ingameSuggestions');
+            dl.innerHTML = [...seen].sort().map(v => `<option value="${v.replace(/"/g,'&quot;')}">`).join('');
+
+            const res2 = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
+                headers: { 'X-Admin-Token': token }
+            });
+            _allReassignments = res2.ok ? await res2.json() : [];
+
+            sel.innerHTML = '<option value="">Select a match...</option>' +
+                _currentMatches.map(m =>
+                    `<option value="${m.match_id}">[${m.date}] ${m.map} (${m.players.length} players)</option>`
+                ).join('');
+        }
+
+        function onMatchSelected() {
+            const matchId = document.getElementById('matchSelector').value;
+            const panel = document.getElementById('matchReassignPanel');
+            if (!matchId) { panel.innerHTML = ''; return; }
+
+            const match = _currentMatches.find(m => m.match_id === matchId);
+            if (!match) { panel.innerHTML = ''; return; }
+
+            const reassignMap = {};
+            _allReassignments.filter(r => r.match_id === matchId).forEach(r => { reassignMap[r.ingame] = r.player; });
+
+            panel.innerHTML = `
+                <div style="background:#1a1a2e;padding:14px;border-radius:6px;">
+                    <strong style="color:#00d4ff;">Players in this match</strong>
+                    <p style="color:#888;font-size:0.8rem;margin:4px 0 12px;">Assign an in-game name to a team player for this match only.</p>
+                    ${match.players.map(p => {
+                        const current = reassignMap[p.full];
+                        const esc = s => s.replace(/'/g, "\\'");
+                        return `
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
+                            <span style="color:#fff;min-width:180px;">${p.full}</span>
+                            ${current
+                                ? `<span style="color:#2bc97e;">→ ${current}</span>
+                                   <button onclick="removeReassignment('${esc(matchId)}','${esc(p.full)}')" style="background:#ff4655;color:white;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Remove</button>`
+                                : `<span style="color:#555;">→ (no override)</span>
+                                   <input type="text" placeholder="Assign to player..." style="flex:1;min-width:140px;padding:5px;margin:0;" id="ri_${CSS.escape(p.full)}" list="rosterSuggestions">
+                                   <button onclick="addReassignment('${esc(matchId)}','${esc(p.full)}',document.getElementById('ri_'+CSS.escape('${esc(p.full)}')).value)" style="background:#00d4ff;color:#000;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Assign</button>`
+                            }
+                        </div>`;
+                    }).join('')}
+                </div>`;
+        }
+
+        async function addReassignment(matchId, ingame, player) {
+            const msg = document.getElementById('reassignStatusMsg');
+            player = (player || '').trim();
+            if (!player) { msg.style.color='red'; msg.innerText='Player name cannot be empty.'; return; }
+            const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                body: JSON.stringify({ match_id: matchId, ingame, player })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? result.message : ('Error: ' + result.error);
+            if (res.ok) await refreshReassignPanel(matchId);
+        }
+
+        async function removeReassignment(matchId, ingame) {
+            const msg = document.getElementById('reassignStatusMsg');
+            const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                body: JSON.stringify({ match_id: matchId, ingame })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? result.message : ('Error: ' + result.error);
+            if (res.ok) await refreshReassignPanel(matchId);
+        }
+
+        async function refreshReassignPanel(matchId) {
+            const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
+                headers: { 'X-Admin-Token': document.getElementById('adminToken').value }
+            });
+            _allReassignments = res.ok ? await res.json() : [];
+            onMatchSelected();
         }
 
         // Load current active season on page open

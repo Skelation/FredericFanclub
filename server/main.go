@@ -52,6 +52,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	premier.RegisterPremierRoutes(mux, allowed, middleware.ApplyCORS)
+	premier.RegisterAdminRoutes(mux, allowed)
 
 	auth.RegisterRoutes(mux)
 	user.RegisterRoutes(mux, allowed)

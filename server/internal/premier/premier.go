@@ -18,6 +18,13 @@ var (
 	premierMutex      sync.RWMutex
 )
 
+// teamRoster is the canonical list of tracked players for stats generation.
+var teamRoster = []string{
+	"Heri#BLUB", "TheMisterED#0007", "Graussbyt#5629",
+	"hhj#8769", "Djibはコリーヌ お あいして#LoVe", "Lal6s9gne#6641", "Riboox",
+	"小胖子vincent#4397",
+}
+
 // StartPremierPoller runs in the background to fetch Premier matches and save them to disk
 func StartPremierPoller(base, matchPath, apiKey string) {
 	rosterToCheck := []struct {
@@ -27,6 +34,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 		{"Heri", "BLUB"},
 		{"TheMisterED", "0007"},
 		{"Graussbyt", "5629"},
+		{"小胖子vincent", "4397"},
 	}
 
 	// Create our new Two-Tier folder structure
@@ -163,8 +171,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 			log.Printf("Premier Poller: Tracked %d matches (Raw files secured in Vault)", len(finalData))
 
 			// 6. CALCULATE ADVANCED DASHBOARD STATS
-			team := []string{"Heri#BLUB", "TheMisterED#0007", "Graussbyt#5629", "hhj#8769", "Djibはコリーヌ お あいして#LoVe", "Lal6s9gne#6641", "Riboox"}
-			GenerateTeamStats(team)
+			GenerateTeamStats(teamRoster)
 		}
 	}()
 }
