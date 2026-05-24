@@ -35,7 +35,32 @@ func radioDropReward() int {
 	}
 }
 
+func startRadioDropCleaner() {
+	go func() {
+		for {
+			res, err := db.DB.Exec(`DELETE FROM radio_drop_claims WHERE drop_id IN (
+				SELECT id FROM radio_drops WHERE datetime(reveal_at, '+' || window_seconds || ' seconds') < datetime('now', '-7 days')
+			)`)
+			if err == nil {
+				n, _ := res.RowsAffected()
+				if n > 0 {
+					log.Printf("[Radio Cleaner] Deleted %d old claim(s)", n)
+				}
+			}
+			res, err = db.DB.Exec(`DELETE FROM radio_drops WHERE datetime(reveal_at, '+' || window_seconds || ' seconds') < datetime('now', '-7 days')`)
+			if err == nil {
+				n, _ := res.RowsAffected()
+				if n > 0 {
+					log.Printf("[Radio Cleaner] Deleted %d old drop(s)", n)
+				}
+			}
+			time.Sleep(24 * time.Hour)
+		}
+	}()
+}
+
 func StartRadioDropScheduler() {
+	startRadioDropCleaner()
 	go func() {
 		for {
 			enabled := db.GetServerConfigInt("radio_drop_enabled", 1)
@@ -156,8 +181,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 		userID := middleware.GetUserIDFromCookie(r)
 		now := time.Now().UTC()
 
-		inactive := func(reason string) {
-			log.Printf("[Radio Drop] Poll — inactive: %s", reason)
+		inactive := func(_ string) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Write([]byte(`{"active": false}`))
 		}
@@ -173,7 +197,9 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 		}
 
 		rows, err := db.DB.Query(`SELECT id, reward_ft, reveal_at, window_seconds, uses_so_far, max_uses
-			FROM radio_drops WHERE uses_so_far < max_uses ORDER BY reveal_at ASC`)
+			FROM radio_drops WHERE uses_so_far < max_uses
+			AND reveal_at >= datetime('now', '-1 day')
+			ORDER BY reveal_at ASC`)
 		if err != nil {
 			inactive(fmt.Sprintf("DB query error: %v", err))
 			return
@@ -197,22 +223,13 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			return
 		}
 
-		log.Printf("[Radio Drop] Poll — found %d unclaimed drop(s), checking windows (now=%s)",
-			len(candidates), now.Format("15:04:05"))
-
 		for _, d := range candidates {
 			revealTime, parseErr := parseReveal(d.RevealAt)
 			if parseErr != nil {
-				log.Printf("[Radio Drop]   drop #%d: SKIP — cannot parse reveal_at %q: %v", d.ID, d.RevealAt, parseErr)
 				continue
 			}
 			windowEnd := revealTime.Add(time.Duration(d.WindowSecs) * time.Second)
-			if now.Before(revealTime) {
-				log.Printf("[Radio Drop]   drop #%d: not yet (reveals in %.0fs)", d.ID, revealTime.Sub(now).Seconds())
-				continue
-			}
-			if now.After(windowEnd) {
-				log.Printf("[Radio Drop]   drop #%d: expired (%.0fs ago)", d.ID, now.Sub(windowEnd).Seconds())
+			if now.Before(revealTime) || now.After(windowEnd) {
 				continue
 			}
 			expiresIn := int(windowEnd.Sub(now).Seconds())
@@ -222,7 +239,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 				db.DB.QueryRow("SELECT COUNT(*) FROM radio_drop_claims WHERE drop_id = ? AND discord_id = ?", d.ID, userID).Scan(&n)
 				alreadyClaimed = n > 0
 			}
-			log.Printf("[Radio Drop]   drop #%d: ACTIVE — %d FT, %ds left, %d/%d claimed",
+			log.Printf("[Radio Drop] Active: drop #%d — %d FT, %ds left, %d/%d claimed",
 				d.ID, d.RewardFT, expiresIn, d.UsesSoFar, d.MaxUses)
 			w.Header().Set("Content-Type", "application/json")
 			fmt.Fprintf(w, `{"active": true, "drop_id": %d, "reward_ft": %d, "expires_in": %d, "already_claimed": %v}`,
