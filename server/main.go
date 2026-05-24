@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"math/rand"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"fmt"
@@ -20,17 +21,20 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/gorilla/websocket"
 
+	"github.com/dchest/captcha"
 	"fredericfanclub/server/discordbot"
 	"fredericfanclub/server/internal/premier"
 )
 
 var (
 	CurrentMarket *PropMarket
-	DB          *sql.DB 
-	oauthConfig *oauth2.Config
-	oauthState  = "fred-secure-state-token"
+	DB            *sql.DB
+	oauthConfig   *oauth2.Config
+	oauthState    = "fred-secure-state-token"
+	devMode       = strings.EqualFold(os.Getenv("FRED_ENV"), "dev") || strings.EqualFold(os.Getenv("FRED_ENV"), "development")
 
-	puuidCache sync.Map // Remembers Player PUUIDs so Riot doesn't rate-limit us
+	puuidCache     sync.Map // Remembers Player PUUIDs so Riot doesn't rate-limit us
+	captchaDropMap sync.Map // captcha_id → drop_id (int)
 )
 
 type PropMarket struct {
@@ -77,6 +81,7 @@ func main() {
 	loadDotEnv()
 	initDB()
 	initOAuth()
+	captcha.SetCustomStore(captcha.NewMemoryStore(captcha.CollectNum, 10*time.Minute))
 
 	base := strings.TrimSuffix(strings.TrimSpace(os.Getenv("VALORANT_API_BASE")), "/")
 	if base == "" {
@@ -95,6 +100,7 @@ func main() {
 
 	startMatchPoller(base, matchPath, apiKey)
 	premier.StartPremierPoller(base, matchPath, apiKey)
+	startRadioDropScheduler()
 
 	mux := http.NewServeMux()
 	premier.RegisterPremierRoutes(mux, allowed, applyCORS)
@@ -400,6 +406,8 @@ func main() {
 		if err != nil { tx.Rollback(); http.Error(w, `{"error": "inventory update failed"}`, 500); return }
 
 		tx.Commit()
+
+		go checkAndAwardSeasonBadge(currentUserID, currentSeason)
 
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, cardName, cardRarity, cardImage)
@@ -1083,6 +1091,473 @@ func main() {
 		fmt.Fprintf(w, `{"success": true, "card": {"name": "%s", "rarity": "%s", "image_url": "%s"}}`, winName, winRarity, winImage)
 	})
 
+	// POST: Redeem a radio code for FT
+	mux.HandleFunc("OPTIONS /api/economy/redeem-code", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/economy/redeem-code", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+
+		var req struct{ Code string `json:"code"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		code := strings.TrimSpace(strings.ToUpper(req.Code))
+
+		// Load the code
+		var rewardFT, maxUses, usesSoFar int
+		var expiresAt string
+		err := DB.QueryRow("SELECT reward_ft, max_uses, uses_so_far, expires_at FROM redeem_codes WHERE code = ?", code).
+			Scan(&rewardFT, &maxUses, &usesSoFar, &expiresAt)
+		if err != nil {
+			http.Error(w, `{"error": "Code invalide ou inexistant"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Check expiry
+		expiry, parseErr := time.Parse("2006-01-02T15:04:05Z", expiresAt)
+		if parseErr != nil {
+			expiry, parseErr = time.Parse("2006-01-02 15:04:05", expiresAt)
+		}
+		if parseErr == nil && time.Now().UTC().After(expiry) {
+			http.Error(w, `{"error": "Ce code a expiré"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Check max uses
+		if usesSoFar >= maxUses {
+			http.Error(w, `{"error": "Ce code a atteint son maximum d'utilisations"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Check if user already redeemed
+		var alreadyUsed int
+		DB.QueryRow("SELECT COUNT(*) FROM code_redemptions WHERE user_id = ? AND code = ?", userID, code).Scan(&alreadyUsed)
+		if alreadyUsed > 0 {
+			http.Error(w, `{"error": "Tu as déjà utilisé ce code"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Apply in a transaction
+		tx, err := DB.Begin()
+		if err != nil {
+			http.Error(w, `{"error": "server error"}`, http.StatusInternalServerError)
+			return
+		}
+		tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", rewardFT, userID)
+		tx.Exec("UPDATE redeem_codes SET uses_so_far = uses_so_far + 1 WHERE code = ?", code)
+		tx.Exec("INSERT INTO code_redemptions (user_id, code) VALUES (?, ?)", userID, code)
+		tx.Commit()
+
+		var newBalance float64
+		DB.QueryRow("SELECT fredtokens FROM users WHERE discord_id = ?", userID).Scan(&newBalance)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "reward_ft": %d, "new_balance": %g}`, rewardFT, newBalance)
+	})
+
+	// POST: Admin — create a redeem code
+	mux.HandleFunc("OPTIONS /api/admin/create-code", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/create-code", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Code      string `json:"code"`
+			RewardFT  int    `json:"reward_ft"`
+			MaxUses   int    `json:"max_uses"`
+			ExpiresAt string `json:"expires_at"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Code == "" || req.RewardFT <= 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		if req.MaxUses <= 0 { req.MaxUses = 1 }
+		if req.ExpiresAt == "" { req.ExpiresAt = time.Now().UTC().AddDate(0, 0, 7).Format("2006-01-02T15:04:05Z") }
+		code := strings.ToUpper(strings.TrimSpace(req.Code))
+		_, err := DB.Exec("INSERT INTO redeem_codes (code, reward_ft, max_uses, uses_so_far, expires_at) VALUES (?, ?, ?, 0, ?)",
+			code, req.RewardFT, req.MaxUses, req.ExpiresAt)
+		if err != nil {
+			http.Error(w, `{"error": "code already exists or db error"}`, http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "code": "%s", "reward_ft": %d, "max_uses": %d}`, code, req.RewardFT, req.MaxUses)
+	})
+
+	// GET: User's badges
+	mux.HandleFunc("GET /api/user/badges", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		rows, err := DB.Query("SELECT badge_type, earned_at FROM user_badges WHERE discord_id = ? ORDER BY earned_at ASC", userID)
+		if err != nil {
+			http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		type Badge struct {
+			Type     string `json:"type"`
+			EarnedAt string `json:"earned_at"`
+		}
+		badges := make([]Badge, 0)
+		for rows.Next() {
+			var b Badge
+			rows.Scan(&b.Type, &b.EarnedAt)
+			badges = append(badges, b)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{"badges": badges})
+	})
+
+	// GET/POST: User showcase card
+	mux.HandleFunc("OPTIONS /api/user/showcase", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/user/showcase", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var name, rarity, imageURL string
+		var cardID int
+		err := DB.QueryRow(`SELECT us.card_id, c.name, c.rarity, c.image_url
+			FROM user_showcase us JOIN cards c ON us.card_id = c.id
+			WHERE us.discord_id = ?`, userID).Scan(&cardID, &name, &rarity, &imageURL)
+		if err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"showcase_card": null}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"showcase_card": {"card_id": %d, "name": %q, "rarity": %q, "image_url": %q}}`, cardID, name, rarity, imageURL)
+	})
+
+	mux.HandleFunc("POST /api/user/showcase", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct{ CardID int `json:"card_id"` }
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CardID == 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		// Verify user owns this card
+		var qty int
+		DB.QueryRow("SELECT quantity FROM inventory WHERE discord_id = ? AND card_id = ?", userID, req.CardID).Scan(&qty)
+		if qty <= 0 {
+			http.Error(w, `{"error": "You don't own this card"}`, http.StatusBadRequest)
+			return
+		}
+		DB.Exec(`INSERT INTO user_showcase (discord_id, card_id) VALUES (?, ?)
+			ON CONFLICT(discord_id) DO UPDATE SET card_id = excluded.card_id`, userID, req.CardID)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"success": true}`))
+	})
+
+	// --- RADIO DROPS (CAPTCHA-gated FT events) ---
+
+	// Admin: schedule a radio drop
+	mux.HandleFunc("OPTIONS /api/admin/radio-drop", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/admin/radio-drop", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			RewardFT      int    `json:"reward_ft"`
+			MaxUses       int    `json:"max_uses"`
+			RevealAt      string `json:"reveal_at"`       // ISO8601
+			WindowSeconds int    `json:"window_seconds"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RewardFT <= 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		if req.MaxUses <= 0    { req.MaxUses = 100 }
+		if req.WindowSeconds <= 0 { req.WindowSeconds = 300 }
+		if req.RevealAt == "" { req.RevealAt = time.Now().UTC().Format(time.RFC3339) }
+		res, err := DB.Exec("INSERT INTO radio_drops (reward_ft, max_uses, reveal_at, window_seconds) VALUES (?, ?, ?, ?)",
+			req.RewardFT, req.MaxUses, req.RevealAt, req.WindowSeconds)
+		if err != nil {
+			http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
+			return
+		}
+		id, _ := res.LastInsertId()
+		log.Printf("[Radio Drop] Created drop #%d — %d FT, max %d uses, reveals at %s, window %ds",
+			id, req.RewardFT, req.MaxUses, req.RevealAt, req.WindowSeconds)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "drop_id": %d, "reward_ft": %d, "reveal_at": %q, "window_seconds": %d}`,
+			id, req.RewardFT, req.RevealAt, req.WindowSeconds)
+	})
+
+	// Public: check if a drop is currently active
+	mux.HandleFunc("GET /api/radio/active-drop", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		now := time.Now().UTC()
+
+		inactive := func(reason string) {
+			log.Printf("[Radio Drop] Poll — inactive: %s", reason)
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"active": false}`))
+		}
+
+		parseReveal := func(s string) (time.Time, error) {
+			if t, err := time.Parse(time.RFC3339, s); err == nil { return t, nil }
+			if t, err := time.Parse("2006-01-02T15:04:05Z", s); err == nil { return t, nil }
+			return time.Parse("2006-01-02 15:04:05", s)
+		}
+
+		// Scan all unclaimed drops in chronological order and find one currently in-window
+		rows, err := DB.Query(`SELECT id, reward_ft, reveal_at, window_seconds, uses_so_far, max_uses
+			FROM radio_drops WHERE uses_so_far < max_uses ORDER BY reveal_at ASC`)
+		if err != nil {
+			inactive(fmt.Sprintf("DB query error: %v", err))
+			return
+		}
+		defer rows.Close()
+
+		type dropRow struct {
+			ID, RewardFT, WindowSecs, UsesSoFar, MaxUses int
+			RevealAt                                      string
+		}
+		var candidates []dropRow
+		for rows.Next() {
+			var d dropRow
+			rows.Scan(&d.ID, &d.RewardFT, &d.RevealAt, &d.WindowSecs, &d.UsesSoFar, &d.MaxUses)
+			candidates = append(candidates, d)
+		}
+		rows.Close()
+
+		if len(candidates) == 0 {
+			inactive("no drops in database")
+			return
+		}
+
+		log.Printf("[Radio Drop] Poll — found %d unclaimed drop(s), checking windows (now=%s)",
+			len(candidates), now.Format("15:04:05"))
+
+		for _, d := range candidates {
+			revealTime, parseErr := parseReveal(d.RevealAt)
+			if parseErr != nil {
+				log.Printf("[Radio Drop]   drop #%d: SKIP — cannot parse reveal_at %q: %v", d.ID, d.RevealAt, parseErr)
+				continue
+			}
+			windowEnd := revealTime.Add(time.Duration(d.WindowSecs) * time.Second)
+			if now.Before(revealTime) {
+				log.Printf("[Radio Drop]   drop #%d: not yet (reveals in %.0fs at %s)",
+					d.ID, revealTime.Sub(now).Seconds(), revealTime.Format("15:04:05"))
+				continue
+			}
+			if now.After(windowEnd) {
+				log.Printf("[Radio Drop]   drop #%d: expired (%.0fs ago)", d.ID, now.Sub(windowEnd).Seconds())
+				continue
+			}
+			// Found an active drop
+			expiresIn := int(windowEnd.Sub(now).Seconds())
+			alreadyClaimed := false
+			if userID != "" {
+				var n int
+				DB.QueryRow("SELECT COUNT(*) FROM radio_drop_claims WHERE drop_id = ? AND discord_id = ?", d.ID, userID).Scan(&n)
+				alreadyClaimed = n > 0
+			}
+			log.Printf("[Radio Drop]   drop #%d: ACTIVE — %d FT, %ds left, %d/%d claimed",
+				d.ID, d.RewardFT, expiresIn, d.UsesSoFar, d.MaxUses)
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprintf(w, `{"active": true, "drop_id": %d, "reward_ft": %d, "expires_in": %d, "already_claimed": %v}`,
+				d.ID, d.RewardFT, expiresIn, alreadyClaimed)
+			return
+		}
+
+		inactive("all drops are outside their windows")
+	})
+
+	// Generate a CAPTCHA challenge tied to a specific drop
+	mux.HandleFunc("GET /api/radio/captcha/new", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		dropID := r.URL.Query().Get("drop_id")
+		if dropID == "" {
+			http.Error(w, `{"error": "drop_id required"}`, http.StatusBadRequest)
+			return
+		}
+		// Verify the drop is still active
+		now := time.Now().UTC()
+		var dID, rewardFT, windowSecs, maxUses, usesSoFar int
+		var revealAt string
+		err := DB.QueryRow("SELECT id, reward_ft, reveal_at, window_seconds, max_uses, uses_so_far FROM radio_drops WHERE id = ?", dropID).
+			Scan(&dID, &rewardFT, &revealAt, &windowSecs, &maxUses, &usesSoFar)
+		if err != nil {
+			http.Error(w, `{"error": "drop not found"}`, http.StatusNotFound)
+			return
+		}
+		revealTime, _ := time.Parse(time.RFC3339, revealAt)
+		if revealTime.IsZero() { revealTime, _ = time.Parse("2006-01-02 15:04:05", revealAt) }
+		if now.Before(revealTime) || now.After(revealTime.Add(time.Duration(windowSecs)*time.Second)) {
+			http.Error(w, `{"error": "drop is not active"}`, http.StatusBadRequest)
+			return
+		}
+		if usesSoFar >= maxUses {
+			http.Error(w, `{"error": "drop is fully claimed"}`, http.StatusBadRequest)
+			return
+		}
+		var already int
+		DB.QueryRow("SELECT COUNT(*) FROM radio_drop_claims WHERE drop_id = ? AND discord_id = ?", dID, userID).Scan(&already)
+		if already > 0 {
+			http.Error(w, `{"error": "already claimed"}`, http.StatusBadRequest)
+			return
+		}
+
+		captchaID := captcha.New()
+		captchaDropMap.Store(captchaID, dID)
+		log.Printf("[Radio Drop] Captcha generated for drop #%d (user %s), captcha_id=%s", dID, userID, captchaID)
+
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"captcha_id": %q, "image_url": "/api/radio/captcha/image/%s", "audio_url": "/api/radio/captcha/audio/%s", "reward_ft": %d}`,
+			captchaID, captchaID, captchaID, rewardFT)
+	})
+
+	// Serve captcha image
+	mux.HandleFunc("GET /api/radio/captcha/image/{id}", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		id := r.PathValue("id")
+		w.Header().Set("Content-Type", "image/png")
+		w.Header().Set("Cache-Control", "no-store")
+		if err := captcha.WriteImage(w, id, 240, 80); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	})
+
+	// Serve captcha audio
+	mux.HandleFunc("GET /api/radio/captcha/audio/{id}", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		id := r.PathValue("id")
+		w.Header().Set("Content-Type", "audio/wav")
+		w.Header().Set("Cache-Control", "no-store")
+		if err := captcha.WriteAudio(w, id, "en"); err != nil {
+			http.Error(w, "not found", http.StatusNotFound)
+		}
+	})
+
+	// Claim a drop by solving its captcha
+	mux.HandleFunc("OPTIONS /api/radio/claim", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/radio/claim", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		userID := getUserIDFromCookie(r)
+		if userID == "" {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			CaptchaID string `json:"captcha_id"`
+			Solution  string `json:"solution"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Verify captcha — this also deletes it so it can't be reused
+		if !captcha.VerifyString(req.CaptchaID, req.Solution) {
+			log.Printf("[Radio Drop] Claim rejected — wrong captcha (id=%s, answer=%q)", req.CaptchaID, req.Solution)
+			http.Error(w, `{"error": "Code incorrect — réessaie"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Recover which drop this captcha was for
+		rawDropID, ok := captchaDropMap.LoadAndDelete(req.CaptchaID)
+		if !ok {
+			http.Error(w, `{"error": "Session expirée — génère un nouveau défi"}`, http.StatusBadRequest)
+			return
+		}
+		dropID := rawDropID.(int)
+
+		// Re-check the drop is still valid (window may have closed while user was solving)
+		now := time.Now().UTC()
+		var rewardFT, windowSecs, maxUses, usesSoFar int
+		var revealAt string
+		err := DB.QueryRow("SELECT reward_ft, reveal_at, window_seconds, max_uses, uses_so_far FROM radio_drops WHERE id = ?", dropID).
+			Scan(&rewardFT, &revealAt, &windowSecs, &maxUses, &usesSoFar)
+		if err != nil {
+			http.Error(w, `{"error": "drop not found"}`, http.StatusInternalServerError)
+			return
+		}
+		revealTime, _ := time.Parse(time.RFC3339, revealAt)
+		if revealTime.IsZero() { revealTime, _ = time.Parse("2006-01-02 15:04:05", revealAt) }
+		if now.After(revealTime.Add(time.Duration(windowSecs) * time.Second)) {
+			http.Error(w, `{"error": "Le drop a expiré"}`, http.StatusBadRequest)
+			return
+		}
+		if usesSoFar >= maxUses {
+			http.Error(w, `{"error": "Drop entièrement réclamé"}`, http.StatusBadRequest)
+			return
+		}
+
+		// Prevent double-claim
+		var already int
+		DB.QueryRow("SELECT COUNT(*) FROM radio_drop_claims WHERE drop_id = ? AND discord_id = ?", dropID, userID).Scan(&already)
+		if already > 0 {
+			http.Error(w, `{"error": "Tu as déjà réclamé ce drop"}`, http.StatusBadRequest)
+			return
+		}
+
+		tx, err := DB.Begin()
+		if err != nil {
+			http.Error(w, `{"error": "server error"}`, http.StatusInternalServerError)
+			return
+		}
+		tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", rewardFT, userID)
+		tx.Exec("UPDATE radio_drops SET uses_so_far = uses_so_far + 1 WHERE id = ?", dropID)
+		tx.Exec("INSERT INTO radio_drop_claims (drop_id, discord_id) VALUES (?, ?)", dropID, userID)
+		tx.Commit()
+
+		var newBalance float64
+		DB.QueryRow("SELECT fredtokens FROM users WHERE discord_id = ?", userID).Scan(&newBalance)
+		log.Printf("[Radio Drop] Claimed — drop #%d, user %s, +%d FT, new balance %.0f", dropID, userID, rewardFT, newBalance)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "reward_ft": %d, "new_balance": %g}`, rewardFT, newBalance)
+	})
+
 	// GET: Fetch the Leaderboards (Top Tokens and Top Collectors)
 	mux.HandleFunc("OPTIONS /api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		applyCORS(w, r, allowed)
@@ -1093,12 +1568,24 @@ func main() {
 	mux.HandleFunc("GET /api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
 		applyCORS(w, r, allowed)
 
-		type LeaderboardUser struct {
-			Username string  `json:"username"`
-			Avatar   string  `json:"avatar"`
-			Score    float64 `json:"score"`
+		type ShowcaseCardInfo struct {
+			Name     string `json:"name"`
+			Rarity   string `json:"rarity"`
+			ImageURL string `json:"image_url"`
 		}
-
+		type LeaderboardUser struct {
+			Username     string            `json:"username"`
+			Avatar       string            `json:"avatar"`
+			Score        float64           `json:"score"`
+			Badges       []string          `json:"badges"`
+			ShowcaseCard *ShowcaseCardInfo  `json:"showcase_card,omitempty"`
+		}
+		type tempUser struct {
+			DiscordID  string
+			Username   string
+			AvatarHash string
+			Score      float64
+		}
 		type LeaderboardRes struct {
 			TopTokens        []LeaderboardUser `json:"top_tokens"`
 			TopCards         []LeaderboardUser `json:"top_cards"`
@@ -1106,13 +1593,11 @@ func main() {
 			AvailableSeasons []string          `json:"available_seasons"`
 		}
 
-		// Determine which season to filter cards by; default to active pack season
 		season := strings.TrimSpace(r.URL.Query().Get("season"))
 		if season == "" {
 			DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&season)
 		}
 
-		// Collect all available seasons from the cards table
 		availableSeasons := make([]string, 0)
 		sRows, _ := DB.Query("SELECT DISTINCT season FROM cards WHERE season != '' ORDER BY season ASC")
 		if sRows != nil {
@@ -1124,28 +1609,18 @@ func main() {
 			sRows.Close()
 		}
 
-		res := LeaderboardRes{
-			TopTokens:        make([]LeaderboardUser, 0),
-			TopCards:         make([]LeaderboardUser, 0),
-			Season:           season,
-			AvailableSeasons: availableSeasons,
-		}
+		var tempTokens, tempCards []tempUser
 
-		// 1. Get Top 10 Richest Users (Fredtokens) — global, not season-scoped
 		rows1, err := DB.Query("SELECT discord_id, username, avatar_url, fredtokens FROM users ORDER BY fredtokens DESC LIMIT 10")
 		if err == nil {
 			for rows1.Next() {
-				var id, name, avatarHash string
-				var tokens float64
-				rows1.Scan(&id, &name, &avatarHash, &tokens)
-				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
-				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
-				res.TopTokens = append(res.TopTokens, LeaderboardUser{Username: name, Avatar: avatar, Score: tokens})
+				var u tempUser
+				rows1.Scan(&u.DiscordID, &u.Username, &u.AvatarHash, &u.Score)
+				tempTokens = append(tempTokens, u)
 			}
 			rows1.Close()
 		}
 
-		// 2. Get Top 10 Card Collectors for the selected season
 		rows2, err := DB.Query(`
 			SELECT u.discord_id, u.username, u.avatar_url, COUNT(i.card_id) as total_cards
 			FROM users u
@@ -1158,15 +1633,68 @@ func main() {
 		`, season)
 		if err == nil {
 			for rows2.Next() {
-				var id, name, avatarHash string
-				var cards float64
-				rows2.Scan(&id, &name, &avatarHash, &cards)
-				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
-				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
-				res.TopCards = append(res.TopCards, LeaderboardUser{Username: name, Avatar: avatar, Score: cards})
+				var u tempUser
+				rows2.Scan(&u.DiscordID, &u.Username, &u.AvatarHash, &u.Score)
+				tempCards = append(tempCards, u)
 			}
 			rows2.Close()
 		}
+
+		// Batch-query badges and showcase cards for all leaderboard users
+		badgeMap := map[string][]string{}
+		showcaseMap := map[string]*ShowcaseCardInfo{}
+		allUsers := append(tempTokens, tempCards...)
+		if len(allUsers) > 0 {
+			seenIDs := map[string]bool{}
+			allIDs := make([]interface{}, 0)
+			for _, u := range allUsers {
+				if !seenIDs[u.DiscordID] {
+					allIDs = append(allIDs, u.DiscordID)
+					seenIDs[u.DiscordID] = true
+				}
+			}
+			placeholders := strings.Repeat("?,", len(allIDs))
+			placeholders = placeholders[:len(placeholders)-1]
+
+			bRows, _ := DB.Query("SELECT discord_id, badge_type FROM user_badges WHERE discord_id IN ("+placeholders+")", allIDs...)
+			if bRows != nil {
+				for bRows.Next() {
+					var did, bt string
+					bRows.Scan(&did, &bt)
+					badgeMap[did] = append(badgeMap[did], bt)
+				}
+				bRows.Close()
+			}
+
+			scRows, _ := DB.Query(`SELECT us.discord_id, c.name, c.rarity, c.image_url
+				FROM user_showcase us JOIN cards c ON us.card_id = c.id
+				WHERE us.discord_id IN (`+placeholders+`)`, allIDs...)
+			if scRows != nil {
+				for scRows.Next() {
+					var did, name, rarity, imageURL string
+					scRows.Scan(&did, &name, &rarity, &imageURL)
+					showcaseMap[did] = &ShowcaseCardInfo{Name: name, Rarity: rarity, ImageURL: imageURL}
+				}
+				scRows.Close()
+			}
+		}
+
+		toLeaderboardUser := func(u tempUser) LeaderboardUser {
+			avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", u.DiscordID, u.AvatarHash)
+			if u.AvatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
+			badges := badgeMap[u.DiscordID]
+			if badges == nil { badges = []string{} }
+			return LeaderboardUser{Username: u.Username, Avatar: avatar, Score: u.Score, Badges: badges, ShowcaseCard: showcaseMap[u.DiscordID]}
+		}
+
+		res := LeaderboardRes{
+			TopTokens:        make([]LeaderboardUser, 0),
+			TopCards:         make([]LeaderboardUser, 0),
+			Season:           season,
+			AvailableSeasons: availableSeasons,
+		}
+		for _, u := range tempTokens { res.TopTokens = append(res.TopTokens, toLeaderboardUser(u)) }
+		for _, u := range tempCards  { res.TopCards  = append(res.TopCards, toLeaderboardUser(u)) }
 
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(res)
@@ -1447,8 +1975,9 @@ func main() {
 
 		// --- NEW: FIRE DISCORD NOTIFICATION ---
 		// We wrap it in a goroutine (`go`) so it doesn't slow down the user's web request!
-		fmt.Println("SENDINBG NESSAGE")
-		go discordbot.SendBetNotification(linkedPlayer, req.Choice, int(req.Amount))
+		if !devMode {
+			go discordbot.SendBetNotification(linkedPlayer, req.Choice, int(req.Amount))
+		}
 		// ---------------------------------------
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1867,7 +2396,9 @@ func main() {
 		CurrentMarket = &marketToPublish
 
 		broadcast <- WSMessage{Type: "market_published"}
-		go discordbot.SendMarketPublishedNotification(marketToPublish.Player, marketToPublish.PropType, marketToPublish.Line, marketToPublish.OverMult, marketToPublish.UnderMult)
+		if !devMode {
+			go discordbot.SendMarketPublishedNotification(marketToPublish.Player, marketToPublish.PropType, marketToPublish.Line, marketToPublish.OverMult, marketToPublish.UnderMult)
+		}
 		w.Header().Set("Content-Type", "application/json")
 		fmt.Fprintf(w, `{"success": true, "message": "Market is now LIVE!"}`)
 	})
@@ -1999,6 +2530,7 @@ func main() {
 		
 		var winners []discordbot.BetResult
 		var losers []discordbot.BetResult
+		var winnerIDs []string
 
 		if err == nil {
 			type Bet struct {
@@ -2024,8 +2556,8 @@ func main() {
 					newStatus = "won"
 					payout := b.Amount * b.Mult
 					tx.Exec("UPDATE users SET fredtokens = fredtokens + ? WHERE discord_id = ?", payout, b.Discord)
-					
 					winners = append(winners, discordbot.BetResult{Username: b.Username, Amount: b.Amount, Payout: payout})
+					winnerIDs = append(winnerIDs, b.Discord)
 				} else {
 					losers = append(losers, discordbot.BetResult{Username: b.Username, Amount: b.Amount})
 				}
@@ -2034,13 +2566,20 @@ func main() {
 		}
 
 		// Wipe the market so it goes back to the grey "Market Closed" screen
-		CurrentMarket = nil 
+		CurrentMarket = nil
 		tx.Commit()
+
+		go func(ids []string) {
+			for _, did := range ids {
+				checkAndAwardBetBadges(did)
+			}
+		}(winnerIDs)
 
 		broadcast <- WSMessage{Type: "market_resolved"}
 
-		// --- FIRE THE DISCORD NOTIFICATION ---
-		go discordbot.SendMarketResolvedNotification(marketPlayer, marketProp, req.Outcome, winners, losers)
+		if !devMode {
+			go discordbot.SendMarketResolvedNotification(marketPlayer, marketProp, req.Outcome, winners, losers)
+		}
 		// -------------------------------------
 
 		w.Header().Set("Content-Type", "application/json")
@@ -2316,8 +2855,136 @@ func initDB() {
 		value TEXT NOT NULL
 	)`)
 	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('current_pack_season', 'Season 1')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_enabled',      'true')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_min_interval', '50')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_max_interval', '110')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_window_sec',   '240')`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS redeem_codes (
+		code       TEXT PRIMARY KEY,
+		reward_ft  INTEGER NOT NULL,
+		max_uses   INTEGER NOT NULL DEFAULT 1,
+		uses_so_far INTEGER NOT NULL DEFAULT 0,
+		expires_at TEXT NOT NULL
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS code_redemptions (
+		user_id    TEXT NOT NULL,
+		code       TEXT NOT NULL,
+		redeemed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (user_id, code)
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_badges (
+		discord_id TEXT NOT NULL,
+		badge_type TEXT NOT NULL,
+		earned_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (discord_id, badge_type)
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_showcase (
+		discord_id TEXT PRIMARY KEY,
+		card_id    INTEGER NOT NULL,
+		FOREIGN KEY(discord_id) REFERENCES users(discord_id),
+		FOREIGN KEY(card_id) REFERENCES cards(id)
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS radio_drops (
+		id             INTEGER PRIMARY KEY AUTOINCREMENT,
+		reward_ft      INTEGER NOT NULL,
+		max_uses       INTEGER NOT NULL DEFAULT 100,
+		uses_so_far    INTEGER NOT NULL DEFAULT 0,
+		reveal_at      TEXT NOT NULL,
+		window_seconds INTEGER NOT NULL DEFAULT 300,
+		created_at     TEXT DEFAULT CURRENT_TIMESTAMP
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS radio_drop_claims (
+		drop_id    INTEGER NOT NULL,
+		discord_id TEXT NOT NULL,
+		claimed_at TEXT DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (drop_id, discord_id)
+	)`)
 
 	log.Println("Database initialized successfully!")
+}
+
+func awardBadgeIfNew(discordID, badgeType string) {
+	DB.Exec(`INSERT OR IGNORE INTO user_badges (discord_id, badge_type) VALUES (?, ?)`, discordID, badgeType)
+}
+
+func checkAndAwardBetBadges(discordID string) {
+	var totalWins int
+	DB.QueryRow("SELECT COUNT(*) FROM bets WHERE discord_id = ? AND status = 'won'", discordID).Scan(&totalWins)
+	if totalWins >= 25 { awardBadgeIfNew(discordID, "bet_wins_25") drop scheduler")
+		for {
+			enabled := getServerConfigInt("radio_drop_enabled", 1)
+			if enabled == 0 {
+				log.Println("[Radio Scheduler] Disabled via config — sleeping 5 min")
+				time.Sleep(5 * time.Minute)
+				continue
+			}
+
+			minInterval := getServerConfigInt("radio_drop_min_interval", 50)
+			maxInterval := getServerConfigInt("radio_drop_max_interval", 110)
+			windowSec   := getServerConfigInt("radio_drop_window_sec", 240)
+			now         := time.Now().UTC()
+
+			// Find the most recently scheduled drop
+			var lastRevealAt string
+			var lastWindowSec int
+			err := DB.QueryRow(`SELECT reveal_at, window_seconds FROM radio_drops ORDER BY reveal_at DESC LIMIT 1`).
+				Scan(&lastRevealAt, &lastWindowSec)
+
+			var scheduleAfter time.Time
+			if err != nil || lastRevealAt == "" {
+				// No drops yet — start first one in 10–30 min
+				delay := time.Duration(10+rand.Intn(20)) * time.Minute
+				scheduleAfter = now.Add(delay)
+				log.Printf("[Radio Scheduler] No prior drops — first drop in %.0f min", delay.Minutes())
+			} else {
+				lastReveal, parseErr := parseDropTime(lastRevealAt)
+				if parseErr != nil {
+					log.Printf("[Radio Scheduler] Cannot parse last reveal_at %q: %v — retrying in 1 min", lastRevealAt, parseErr)
+					time.Sleep(time.Minute)
+					continue
+				}
+				windowEnd := lastReveal.Add(time.Duration(lastWindowSec) * time.Second)
+				if windowEnd.After(now) {
+					// Last drop is still in its window or hasn't revealed yet — wait for it to end
+					wait := windowEnd.Sub(now) + 10*time.Second
+					log.Printf("[Radio Scheduler] Last drop still live, waiting %.0fs", wait.Seconds())
+					time.Sleep(wait)
+					continue
+				}
+				// Schedule next drop after a random gap from when the last window ended
+				gapMin := minInterval + rand.Intn(maxInterval-minInterval+1)
+				scheduleAfter = windowEnd.Add(time.Duration(gapMin) * time.Minute)
+			}
+
+			if scheduleAfter.Before(now) {
+				scheduleAfter = now.Add(time.Minute)
+			}
+
+			ft := radioDropReward()
+			revealStr := scheduleAfter.Format(time.RFC3339)
+			res, dbErr := DB.Exec(
+				"INSERT INTO radio_drops (reward_ft, max_uses, reveal_at, window_seconds) VALUES (?, 9999, ?, ?)",
+				ft, revealStr, windowSec)
+			if dbErr != nil {
+				log.Printf("[Radio Scheduler] DB insert failed: %v — retrying in 1 min", dbErr)
+				time.Sleep(time.Minute)
+				continue
+			}
+			id, _ := res.LastInsertId()
+			log.Printf("[Radio Scheduler] Drop #%d scheduled — %d FT at %s (window %ds)",
+				id, ft, scheduleAfter.Format("2006-01-02 15:04 UTC"), windowSec)
+
+			// Sleep until the window ends, then loop to schedule the next one
+			windowEnd := scheduleAfter.Add(time.Duration(windowSec) * time.Second)
+			time.Sleep(windowEnd.Sub(now) + 10*time.Second)
+		}
+	}()
 }
 
 func logRequests(next http.Handler) http.Handler {
