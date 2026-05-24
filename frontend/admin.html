@@ -82,6 +82,17 @@
 
 <button onclick="scheduleMatch()" style="background: #ffb01f;">Schedule Match</button>
 <p id="matchStatusMsg"></p>
+
+        <hr style="border-color: #444; margin: 30px 0;">
+
+        <h2>Active Pack Season</h2>
+        <p id="currentSeasonDisplay" style="color: #00d4ff; font-weight: bold; margin-bottom: 15px;">Loading...</p>
+
+        <label>New Season Name:</label>
+        <input type="text" id="newSeasonName" placeholder="e.g. Season 2">
+
+        <button onclick="setPackSeason()" style="background: #ff4655;">Set Active Season</button>
+        <p id="seasonStatusMsg"></p>
     </div>
 
         <script>
@@ -103,7 +114,8 @@
                 const data = {
                     name: document.getElementById('cardName').value,
                     rarity: document.getElementById('cardRarity').value,
-                    image_url: document.getElementById('cardImage').value
+                    image_url: document.getElementById('cardImage').value,
+                    season: document.getElementById('cardSeason').value
                 };
 
                 const response = await fetch(`${getApiBase()}/api/admin/cards`, {
@@ -228,12 +240,6 @@
                 msg.innerText = "Error: " + result.error;
             }
         }
-        const data = {
-                    name: document.getElementById('cardName').value,
-                    rarity: document.getElementById('cardRarity').value,
-                    image_url: document.getElementById('cardImage').value,
-                    season: document.getElementById('cardSeason').value // NEW
-                };
         async function scheduleMatch() {
     const msg = document.getElementById('matchStatusMsg');
     const token = document.getElementById('adminToken').value;
@@ -269,6 +275,40 @@
         msg.innerText = "Fetch Error: " + error.message;
     }
 }
+        async function setPackSeason() {
+            const token = document.getElementById('adminToken').value;
+            const season = document.getElementById('newSeasonName').value.trim();
+            const msg = document.getElementById('seasonStatusMsg');
+
+            if (!season) { msg.style.color = 'red'; msg.innerText = 'Season name cannot be empty.'; return; }
+
+            const res = await fetch(`${getApiBase()}/api/admin/set-pack-season`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                body: JSON.stringify({ season })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                msg.style.color = 'lime';
+                msg.innerText = `Active season set to: ${result.season}`;
+                document.getElementById('currentSeasonDisplay').innerText = result.season;
+                document.getElementById('newSeasonName').value = '';
+            } else {
+                msg.style.color = 'red';
+                msg.innerText = 'Error: ' + result.error;
+            }
+        }
+
+        // Load current active season on page open
+        fetch(getApiBase() + '/api/packs/season')
+            .then(r => r.json())
+            .then(data => {
+                const el = document.getElementById('currentSeasonDisplay');
+                if (el) el.innerText = data.season || 'Unknown';
+            })
+            .catch(() => {
+                document.getElementById('currentSeasonDisplay').innerText = 'Could not load';
+            });
     </script>
     </body>
 </html>

@@ -94,6 +94,7 @@
         <div>
             <h1>Card Index</h1>
             <p id="globalCompletion" style="color: #00d4ff; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; margin-top: 10px;">Loading database...</p>
+            <p id="seasonCompletion" style="color: #aaa; font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; margin-top: 4px;"></p>
         </div>
     </header>
 
@@ -105,42 +106,50 @@
 
     <script src="js/site.js"></script>
     <script>
-        let allCards = []; // Store them all globally so we can switch tabs without re-fetching
+        let allCards = [];
+        let activeSeason = null;
 
-        // We explicitly define the order we want the rarities to render on the screen!
         const RARITY_ORDER = ["radiant", "immortal", "ascendant", "diamond", "bronze", "iron"];
 
         document.addEventListener('DOMContentLoaded', async () => {
             const content = document.getElementById('catalogContent');
             const globalCompletion = document.getElementById('globalCompletion');
-            
+            const seasonCompletion = document.getElementById('seasonCompletion');
+
             try {
-                const res = await fetch(`${getApiBase()}/api/catalog`, { credentials: 'include' });
-                if (!res.ok) throw new Error();
-                
-                allCards = await res.json();
-                
+                const [catalogRes, seasonRes] = await Promise.all([
+                    fetch(`${getApiBase()}/api/catalog`, { credentials: 'include' }),
+                    fetch(`${getApiBase()}/api/packs/season`, { credentials: 'include' })
+                ]);
+                if (!catalogRes.ok) throw new Error();
+
+                allCards = await catalogRes.json();
+                if (seasonRes.ok) {
+                    const seasonData = await seasonRes.json();
+                    activeSeason = seasonData.season || null;
+                }
+
                 if (!allCards || allCards.length === 0) {
                     content.innerHTML = `<div style="text-align: center; color: white;">No cards exist in the database yet.</div>`;
                     globalCompletion.innerText = "";
                     return;
                 }
 
-                // Update total completion
                 const totalUnlocked = allCards.filter(c => c.unlocked).length;
-                globalCompletion.innerText = `Global Completion: ${totalUnlocked} / ${allCards.length} (${Math.round((totalUnlocked/allCards.length)*100)}%)`;
+                globalCompletion.innerText = `Global Completion: ${totalUnlocked} / ${allCards.length} (${Math.round((totalUnlocked / allCards.length) * 100)}%)`;
 
-                // 1. Find all unique seasons
                 const seasons = [...new Set(allCards.map(c => c.season))].sort();
 
-                // 2. Build the Tabs
+                // Default to active pack season; fall back to first tab
+                const defaultSeason = (activeSeason && seasons.includes(activeSeason)) ? activeSeason : seasons[0];
+
                 const tabsContainer = document.getElementById('seasonTabs');
-                seasons.forEach((season, index) => {
+                seasons.forEach(season => {
                     const btn = document.createElement('button');
-                    btn.className = `season-tab ${index === 0 ? 'active' : ''}`;
-                    btn.innerText = season;
+                    btn.className = `season-tab${season === defaultSeason ? ' active' : ''}`;
+                    btn.innerText = season + (season === activeSeason ? ' ★' : '');
+                    btn.dataset.season = season;
                     btn.onclick = () => {
-                        // Remove active class from all, add to this one
                         document.querySelectorAll('.season-tab').forEach(b => b.classList.remove('active'));
                         btn.classList.add('active');
                         renderSeason(season);
@@ -148,20 +157,26 @@
                     tabsContainer.appendChild(btn);
                 });
 
-                // 3. Render the first season by default
-                if (seasons.length > 0) renderSeason(seasons[0]);
+                if (defaultSeason) renderSeason(defaultSeason);
 
             } catch (err) {
                 content.innerHTML = `<div style="text-align: center; color: #ff4655;">Could not load the catalog.</div>`;
             }
         });
 
-        function renderSeason(activeSeason) {
+        function renderSeason(season) {
             const content = document.getElementById('catalogContent');
-            content.innerHTML = ''; // Clear the screen
+            content.innerHTML = '';
+
+            const seasonCards = allCards.filter(c => c.season === season);
+            const seasonUnlocked = seasonCards.filter(c => c.unlocked).length;
+            const seasonEl = document.getElementById('seasonCompletion');
+            if (seasonEl) {
+                seasonEl.innerText = `${season}: ${seasonUnlocked} / ${seasonCards.length} (${seasonCards.length ? Math.round((seasonUnlocked / seasonCards.length) * 100) : 0}%)`;
+            }
 
             // Filter cards to just this season
-            const seasonCards = allCards.filter(c => c.season === activeSeason);
+            const activeSeason = season;
 
             // Group them by rarity
             const cardsByRarity = {};

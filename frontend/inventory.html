@@ -205,19 +205,38 @@
 
         let currentModalCard = null; // Remembers which card is currently open in full screen
 
+        function buildCard(card) {
+            let imgPath = card.image_url;
+            if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath;
+            const wrapper = document.createElement('div');
+            wrapper.className = 'inventory-card-wrapper';
+            wrapper.onclick = () => openModal(card, imgPath);
+            wrapper.innerHTML = `
+                ${card.quantity > 1 ? `<div class="quantity-badge">x${card.quantity}</div>` : ''}
+                <div class="tcg-card rarity-${card.rarity}"
+                     style="width: 180px; height: 252px; font-size: 1.1rem;
+                            background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
+                </div>`;
+            return wrapper;
+        }
+
         async function loadInventory() {
             const grid = document.getElementById('inventoryGrid');
             const loading = document.getElementById('inventoryLoading');
             grid.innerHTML = "";
             loading.style.display = "block";
-            
+
             try {
-                const res = await fetch(`${getApiBase()}/api/inventory`, { credentials: 'include' });
-                if (!res.ok) throw new Error("Not logged in");
-                
-                const cards = await res.json();
+                const [invRes, seasonRes] = await Promise.all([
+                    fetch(`${getApiBase()}/api/inventory`, { credentials: 'include' }),
+                    fetch(`${getApiBase()}/api/packs/season`, { credentials: 'include' })
+                ]);
+                if (!invRes.ok) throw new Error("Not logged in");
+
+                const cards = await invRes.json();
+                const currentSeason = seasonRes.ok ? (await seasonRes.json()).season : null;
                 loading.style.display = "none";
-                
+
                 if (!cards || cards.length === 0) {
                     grid.innerHTML = `
                         <div style="grid-column: 1 / -1; text-align: center; color: rgba(255,255,255,0.4); padding: 60px; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem;">
@@ -226,30 +245,28 @@
                     return;
                 }
 
-                cards.forEach(card => {
-                    let imgPath = card.image_url;
-                    if (imgPath && !imgPath.startsWith('http') && !imgPath.startsWith('/')) imgPath = '/' + imgPath; 
+                // Cards with no season field (old server) or matching season → current group
+                const currentCards = currentSeason ? cards.filter(c => !c.season || c.season === currentSeason) : cards;
+                const oldCards = currentSeason ? cards.filter(c => c.season && c.season !== currentSeason) : [];
 
-                    const wrapper = document.createElement('div');
-                    wrapper.className = 'inventory-card-wrapper';
-                    
-                    // Click event to open the Full Screen Modal!
-                    wrapper.onclick = () => openModal(card, imgPath);
-                    
-                    let badgeHTML = '';
-                    if (card.quantity > 1) {
-                        badgeHTML = `<div class="quantity-badge">x${card.quantity}</div>`;
-                    }
+                currentCards.forEach(card => grid.appendChild(buildCard(card)));
 
-                    wrapper.innerHTML = `
-                        ${badgeHTML}
-                        <div class="tcg-card rarity-${card.rarity}" 
-                             style="width: 180px; height: 252px; font-size: 1.1rem;
-                                    background-image: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0) 40%), url('${imgPath}');">
-                        </div>
-                    `;
-                    grid.appendChild(wrapper);
-                });
+                if (oldCards.length > 0) {
+                    // Separator
+                    const sep = document.createElement('div');
+                    sep.style.cssText = 'grid-column: 1 / -1; display: flex; align-items: center; gap: 20px; margin: 20px 0 10px;';
+                    sep.innerHTML = `
+                        <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.12);"></div>
+                        <span style="font-family: \'Orbitron\', sans-serif; font-size: 0.75rem; letter-spacing: 3px; color: rgba(255,255,255,0.3); text-transform: uppercase; white-space: nowrap;">Previous Seasons</span>
+                        <div style="flex: 1; height: 1px; background: rgba(255,255,255,0.12);"></div>`;
+                    grid.appendChild(sep);
+
+                    oldCards.forEach(card => {
+                        const w = buildCard(card);
+                        w.style.opacity = '0.6';
+                        grid.appendChild(w);
+                    });
+                }
 
             } catch (err) {
                 loading.innerHTML = `<span style="color: #ff4655;">Please log in to view your collection.</span>`;

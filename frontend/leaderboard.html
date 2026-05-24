@@ -89,6 +89,14 @@
             color: #00d4ff;
         }
 
+        .season-tab {
+            background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 10px 25px; border-radius: 30px; cursor: pointer;
+            font-family: 'Orbitron', sans-serif; font-size: 1rem; transition: all 0.3s;
+        }
+        .season-tab:hover { background: rgba(255,255,255,0.1); }
+        .season-tab.active { background: #b489ff; color: #000; border-color: #b489ff; box-shadow: 0 0 15px rgba(180,137,255,0.5); font-weight: bold; }
+
         /* --- THE TOP 3 PODIUM COLORS --- */
         .rank-1 .rank-number { color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.8); }
         .rank-1 .player-avatar { border-color: #ffd700; box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
@@ -154,8 +162,11 @@
     </header>
 
     <main class="container" style="padding-bottom: 100px;">
+
+        <div id="seasonTabs" style="display: flex; justify-content: center; gap: 15px; margin: 30px 0; flex-wrap: wrap;"></div>
+
         <div class="leaderboard-grid">
-            
+
             <div class="board-panel">
                 <div class="board-header" style="color: #00ff64; border-color: rgba(0, 255, 100, 0.3);">💰 Les plus Riches</div>
                 <div id="tokensList">
@@ -164,7 +175,7 @@
             </div>
 
             <div class="board-panel">
-                <div class="board-header" style="color: #b489ff; border-color: rgba(180, 137, 255, 0.3);">🃏 Plus grands Collectioneurs</div>
+                <div id="cardsHeader" class="board-header" style="color: #b489ff; border-color: rgba(180, 137, 255, 0.3);">🃏 Plus grands Collectioneurs</div>
                 <div id="cardsList">
                     <p style="text-align: center; color: #888;">Loading data...</p>
                 </div>
@@ -175,48 +186,64 @@
 
     <script src="js/site.js"></script>
     <script>
-        document.addEventListener('DOMContentLoaded', async () => {
+        let tabsBuilt = false;
+
+        function renderBoard(users, targetElement, suffix) {
+            if (!users || users.length === 0) {
+                targetElement.innerHTML = `<p style="text-align: center; color: #888;">No players found.</p>`;
+                return;
+            }
+            targetElement.innerHTML = users.map((user, index) => {
+                const rank = index + 1;
+                const rankClass = rank === 1 ? 'rank-1' : rank === 2 ? 'rank-2' : rank === 3 ? 'rank-3' : '';
+                const scoreFormatted = Math.round(user.score).toLocaleString();
+                return `
+                    <div class="board-row ${rankClass}">
+                        <div class="player-info">
+                            <span class="rank-number">#${rank}</span>
+                            <img src="${user.avatar}" class="player-avatar" alt="Avatar">
+                            <span class="player-name">${user.username}</span>
+                        </div>
+                        <span class="player-score">${scoreFormatted} ${suffix}</span>
+                    </div>`;
+            }).join('');
+        }
+
+        async function loadLeaderboard(season) {
             const tokensList = document.getElementById('tokensList');
             const cardsList = document.getElementById('cardsList');
+            const cardsHeader = document.getElementById('cardsHeader');
 
             try {
-                // Fetch the Leaderboard data
-                const res = await fetch(`${getApiBase()}/api/leaderboard`, { credentials: 'include' });
-                if (!res.ok) throw new Error("Failed to load leaderboards");
+                const url = season
+                    ? `${getApiBase()}/api/leaderboard?season=${encodeURIComponent(season)}`
+                    : `${getApiBase()}/api/leaderboard`;
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) throw new Error();
                 const data = await res.json();
 
-                // Helper function to render a board
-                function renderBoard(users, targetElement, suffix) {
-                    if (!users || users.length === 0) {
-                        targetElement.innerHTML = `<p style="text-align: center; color: #888;">No players found.</p>`;
-                        return;
-                    }
-
-                    targetElement.innerHTML = users.map((user, index) => {
-                        const rank = index + 1;
-                        let rankClass = '';
-                        // Apply special glowing classes for the Top 3
-                        if (rank === 1) rankClass = 'rank-1';
-                        else if (rank === 2) rankClass = 'rank-2';
-                        else if (rank === 3) rankClass = 'rank-3';
-
-                        // Format the number to look clean (e.g. 1000 instead of 1000.0)
-                        const scoreFormatted = Math.round(user.score).toLocaleString();
-
-                        return `
-                            <div class="board-row ${rankClass}">
-                                <div class="player-info">
-                                    <span class="rank-number">#${rank}</span>
-                                    <img src="${user.avatar}" class="player-avatar" alt="Avatar">
-                                    <span class="player-name">${user.username}</span>
-                                </div>
-                                <span class="player-score">${scoreFormatted} ${suffix}</span>
-                            </div>
-                        `;
-                    }).join('');
+                // Build season tabs once, using the list returned by the server
+                if (!tabsBuilt && data.available_seasons && data.available_seasons.length > 0) {
+                    tabsBuilt = true;
+                    const tabsContainer = document.getElementById('seasonTabs');
+                    data.available_seasons.forEach(s => {
+                        const btn = document.createElement('button');
+                        btn.className = 'season-tab' + (s === data.season ? ' active' : '');
+                        btn.textContent = s;
+                        btn.onclick = () => {
+                            document.querySelectorAll('.season-tab').forEach(b => b.classList.remove('active'));
+                            btn.classList.add('active');
+                            loadLeaderboard(s);
+                        };
+                        tabsContainer.appendChild(btn);
+                    });
                 }
 
-                // Render both boards
+                // Update cards board header to reflect active season
+                if (cardsHeader && data.season) {
+                    cardsHeader.textContent = `🃏 ${data.season} — Collectioneurs`;
+                }
+
                 renderBoard(data.top_tokens, tokensList, "FT");
                 renderBoard(data.top_cards, cardsList, "Cards");
 
@@ -224,7 +251,9 @@
                 tokensList.innerHTML = `<p style="text-align: center; color: #ff4655;">Error loading leaderboard.</p>`;
                 cardsList.innerHTML = `<p style="text-align: center; color: #ff4655;">Error loading leaderboard.</p>`;
             }
-        });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => loadLeaderboard(null));
     </script>
 </body>
 </html>

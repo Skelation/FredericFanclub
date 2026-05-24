@@ -69,6 +69,7 @@
 
             <div class="unboxing-controls" style="text-align: center; margin-top: 30px;">
                 <div class="unboxing-controls" style="text-align: center; margin-top: 30px;">
+                    <p id="packSeasonLabel" style="font-family: 'Orbitron', sans-serif; font-size: 0.75rem; letter-spacing: 3px; color: #00d4ff; text-transform: uppercase; margin-bottom: 10px; opacity: 0.8;"></p>
                     <button id="btnOpenCase" class="open-case-btn">
                         OPEN CASE <span class="price-tag">(250 FT)</span>
                     </button>
@@ -114,5 +115,14 @@
     </footer>
 
     <script src="js/site.js?v=pack9"></script>
+    <script>
+        fetch(getApiBase() + '/api/packs/season', { credentials: 'include' })
+            .then(r => r.json())
+            .then(data => {
+                const el = document.getElementById('packSeasonLabel');
+                if (el && data.season) el.textContent = data.season + ' Packs';
+            })
+            .catch(() => {});
+    </script>
 </body>
 </html>

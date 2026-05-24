@@ -25,3 +25,5 @@ Thumbs.db
 .dockerignore
 
 frontend/images/cards
+
+CLAUDE.md

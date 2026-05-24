@@ -373,10 +373,15 @@ func main() {
 		}
 
 				// 5. Pull Card
+		var currentSeason string
+		if scanErr := DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&currentSeason); scanErr != nil {
+			currentSeason = "Season 1"
+		}
+
 		var cardID int
 		var cardName, cardRarity, cardImage string
-		err = DB.QueryRow("SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? ORDER BY RANDOM() LIMIT 1", targetRarity).Scan(&cardID, &cardName, &cardRarity, &cardImage)
-		
+		err = DB.QueryRow("SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? AND season = ? ORDER BY RANDOM() LIMIT 1", targetRarity, currentSeason).Scan(&cardID, &cardName, &cardRarity, &cardImage)
+
 		if err != nil {
 			http.Error(w, `{"error": "No cards available for rarity: `+targetRarity+`"}`, http.StatusInternalServerError)
 			return
@@ -868,19 +873,19 @@ func main() {
 
 		// ADDED: c.id (so we can shred it) AND i.quantity > 0 (so empty cards vanish)
 		query := `
-			SELECT c.id, c.name, c.rarity, c.image_url, i.quantity
+			SELECT c.id, c.name, c.rarity, c.image_url, c.season, i.quantity
 			FROM inventory i
 			JOIN cards c ON i.card_id = c.id
 			WHERE i.discord_id = ? AND i.quantity > 0
-			ORDER BY 
-				CASE c.rarity 
-					WHEN 'radiant' THEN 1 
-					WHEN 'immortal' THEN 2 
-					WHEN 'ascendant' THEN 3 
-					WHEN 'diamond' THEN 4 
-					WHEN 'bronze' THEN 5 
-					WHEN 'iron' THEN 6 
-					ELSE 7 
+			ORDER BY
+				CASE c.rarity
+					WHEN 'radiant' THEN 1
+					WHEN 'immortal' THEN 2
+					WHEN 'ascendant' THEN 3
+					WHEN 'diamond' THEN 4
+					WHEN 'bronze' THEN 5
+					WHEN 'iron' THEN 6
+					ELSE 7
 				END, c.name ASC`
 
 		rows, err := DB.Query(query, userID)
@@ -895,13 +900,14 @@ func main() {
 			Name     string `json:"name"`
 			Rarity   string `json:"rarity"`
 			ImageURL string `json:"image_url"`
+			Season   string `json:"season"`
 			Quantity int    `json:"quantity"`
 		}
 
 		var items []InventoryItem
 		for rows.Next() {
 			var item InventoryItem
-			rows.Scan(&item.ID, &item.Name, &item.Rarity, &item.ImageURL, &item.Quantity)
+			rows.Scan(&item.ID, &item.Name, &item.Rarity, &item.ImageURL, &item.Season, &item.Quantity)
 			items = append(items, item)
 		}
 
@@ -1094,51 +1100,69 @@ func main() {
 		}
 
 		type LeaderboardRes struct {
-			TopTokens []LeaderboardUser `json:"top_tokens"`
-			TopCards  []LeaderboardUser `json:"top_cards"`
+			TopTokens        []LeaderboardUser `json:"top_tokens"`
+			TopCards         []LeaderboardUser `json:"top_cards"`
+			Season           string            `json:"season"`
+			AvailableSeasons []string          `json:"available_seasons"`
+		}
+
+		// Determine which season to filter cards by; default to active pack season
+		season := strings.TrimSpace(r.URL.Query().Get("season"))
+		if season == "" {
+			DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&season)
+		}
+
+		// Collect all available seasons from the cards table
+		availableSeasons := make([]string, 0)
+		sRows, _ := DB.Query("SELECT DISTINCT season FROM cards WHERE season != '' ORDER BY season ASC")
+		if sRows != nil {
+			for sRows.Next() {
+				var s string
+				sRows.Scan(&s)
+				availableSeasons = append(availableSeasons, s)
+			}
+			sRows.Close()
 		}
 
 		res := LeaderboardRes{
-			TopTokens: make([]LeaderboardUser, 0),
-			TopCards:  make([]LeaderboardUser, 0),
+			TopTokens:        make([]LeaderboardUser, 0),
+			TopCards:         make([]LeaderboardUser, 0),
+			Season:           season,
+			AvailableSeasons: availableSeasons,
 		}
 
-		// 1. Get Top 10 Richest Users (Fredtokens)
+		// 1. Get Top 10 Richest Users (Fredtokens) — global, not season-scoped
 		rows1, err := DB.Query("SELECT discord_id, username, avatar_url, fredtokens FROM users ORDER BY fredtokens DESC LIMIT 10")
 		if err == nil {
 			for rows1.Next() {
 				var id, name, avatarHash string
 				var tokens float64
 				rows1.Scan(&id, &name, &avatarHash, &tokens)
-				
 				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
 				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
-				
 				res.TopTokens = append(res.TopTokens, LeaderboardUser{Username: name, Avatar: avatar, Score: tokens})
 			}
 			rows1.Close()
 		}
 
-		// 2. Get Top 10 Card Collectors (Sum of all quantities in inventory)
-		// 2. Get Top 10 Card Collectors (Count UNIQUE cards they currently own)
+		// 2. Get Top 10 Card Collectors for the selected season
 		rows2, err := DB.Query(`
-			SELECT u.discord_id, u.username, u.avatar_url, COUNT(i.card_id) as total_cards 
-			FROM users u 
-			JOIN inventory i ON u.discord_id = i.discord_id 
-			WHERE i.quantity > 0
-			GROUP BY u.discord_id 
-			ORDER BY total_cards DESC 
+			SELECT u.discord_id, u.username, u.avatar_url, COUNT(i.card_id) as total_cards
+			FROM users u
+			JOIN inventory i ON u.discord_id = i.discord_id
+			JOIN cards c ON i.card_id = c.id
+			WHERE i.quantity > 0 AND c.season = ?
+			GROUP BY u.discord_id
+			ORDER BY total_cards DESC
 			LIMIT 10
-		`)
+		`, season)
 		if err == nil {
 			for rows2.Next() {
 				var id, name, avatarHash string
-				var cards float64 // COUNT() returns a number we can store as float64 to match our struct
+				var cards float64
 				rows2.Scan(&id, &name, &avatarHash, &cards)
-				
 				avatar := fmt.Sprintf("https://cdn.discordapp.com/avatars/%s/%s.png", id, avatarHash)
 				if avatarHash == "" { avatar = "https://cdn.discordapp.com/embed/avatars/0.png" }
-				
 				res.TopCards = append(res.TopCards, LeaderboardUser{Username: name, Avatar: avatar, Score: cards})
 			}
 			rows2.Close()
@@ -2125,6 +2149,46 @@ func main() {
 		}
 	})
 
+	// GET: Current active pack season (public)
+	mux.HandleFunc("GET /api/packs/season", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		var season string
+		if err := DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&season); err != nil {
+			season = "Season 1"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"season": %q}`, season)
+	})
+
+	// ADMIN: Set the active pack season
+	mux.HandleFunc("OPTIONS /api/admin/set-pack-season", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("POST /api/admin/set-pack-season", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != strings.TrimSpace(os.Getenv("FRED_ADMIN_TOKEN")) {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Season string `json:"season"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Season) == "" {
+			http.Error(w, `{"error": "season field required"}`, http.StatusBadRequest)
+			return
+		}
+		_, err := DB.Exec("INSERT OR REPLACE INTO server_config (key, value) VALUES ('current_pack_season', ?)", strings.TrimSpace(req.Season))
+		if err != nil {
+			http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "season": %q}`, strings.TrimSpace(req.Season))
+	})
+
 	// Server execution block
 	srv := &http.Server{
 		Addr:              ":" + port,
@@ -2246,6 +2310,12 @@ func initDB() {
 	DB.Exec("ALTER TABLE cards ADD COLUMN season TEXT DEFAULT 'Season 1'")
 	// NEW: Add a column to track the exact time of their last daily claim
 	DB.Exec("ALTER TABLE users ADD COLUMN last_daily_claim TEXT DEFAULT ''")
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS server_config (
+		key   TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	)`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('current_pack_season', 'Season 1')`)
 
 	log.Println("Database initialized successfully!")
 }
