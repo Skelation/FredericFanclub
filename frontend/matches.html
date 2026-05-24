@@ -3,51 +3,58 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Matches | Frederic Fanclub</title>
+    <title>Matchs | Frederic Fanclub</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/premier.css">
 </head>
-<body>
+<body class="matches-page">
     <div class="bg-waves" aria-hidden="true"></div>
-        <nav>
-            <div class="container">
-                <a href="index.html" class="nav-logo">
-                    <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
-                    <span class="nav-logo-text">FRED</span>
-                </a>
 
-                <ul class="nav-links">
-                    <li><a href="index.html">Home</a></li>
-                    <li><a href="matches.html" class="nav-active">Matchs</a></li>
-                    <li><a href="premier.html">Premier</a></li>
-                    <li><a href="radio.html">Radio</a></li>
-                    <li><a href="betting.html">Betting</a></li> 
-                    <li><a href="packs.html">Packs</a></li>
-                    <li><a href="inventory.html">Inventaire</a></li>
-                    <li><a href="catalog.html">Catalogue</a></li>
-                    <li><a href="leaderboard.html">Classement</a></li>
-                </ul>
-
-                <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
-                    <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
-                </div>
-            </div>
-        </nav>
-        <header class="page-hero fade-in">
-            <div>
-                <h1>FREDERIC FANCLUB</h1>
-            </div>
-        </header>
-
-    <section class="matches-section" aria-labelledby="match-history-heading">
+    <nav>
         <div class="container">
-            <p id="matchFetchStatus" class="match-fetch-status" aria-live="polite"></p>
-            <div id="playerFilterBar" class="player-filter-bar" hidden aria-label="Show matches involving these players"></div>
-            <div class="match-load-more-wrap" id="matchLoadMoreWrap">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60" decoding="async">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="matches.html" class="nav-active">Matchs</a></li>
+                <li><a href="premier.html">Premier</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html">Betting</a></li>
+                <li><a href="packs.html">Packs</a></li>
+                <li><a href="inventory.html">Inventaire</a></li>
+                <li><a href="catalog.html">Catalogue</a></li>
+                <li><a href="leaderboard.html">Classement</a></li>
+            </ul>
+
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
             </div>
-            <ol id="matchList" class="match-list"></ol>
         </div>
-    </section>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>Matchs</h1>
+            <p>Historique · Classé · Roster</p>
+        </div>
+    </header>
+
+    <main class="container">
+        <p id="matchFetchStatus" class="match-fetch-status" aria-live="polite"></p>
+
+        <div id="playerFilterBar" class="filter-bar" hidden aria-label="Filter matches by player"></div>
+        <p id="matchFilterHint" class="match-filter-hint" hidden>Cliquez sur un joueur pour afficher ou masquer ses matchs.</p>
+
+        <div class="season-heading">Matchs compétitifs</div>
+        <div id="matchList" class="match-list"></div>
+
+        <div class="match-load-more-wrap" id="matchLoadMoreWrap">
+            <button id="matchLoadMoreBtn" class="match-load-more-btn" type="button" hidden>Load more matches</button>
+        </div>
+    </main>
 
     <footer>
         <div class="container">
@@ -60,6 +67,6 @@
             </div>
         </div>
     </footer>
-    <script src="js/site.js?v=mono8"></script>
+    <script src="js/site.js?v=mono12"></script>
 </body>
 </html>

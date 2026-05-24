@@ -682,6 +682,26 @@ function initMatchFilters(body, matchList, statusEl, apiBase) {
     syncLoadMoreButton();
 }
 
+function toggleCard(card) { card.classList.toggle('expanded'); }
+
+function getRosterPlayerStats(match, playerName) {
+    let players = match && match.players;
+    if (players && !Array.isArray(players) && players.all_players) players = players.all_players;
+    if (!Array.isArray(players)) return null;
+    const p = players.find(pl => pl && pl.name && pl.name.toLowerCase() === String(playerName).toLowerCase());
+    if (!p || !p.stats) return null;
+    const rounds = (match.metadata && match.metadata.rounds_played > 0) ? match.metadata.rounds_played : 1;
+    const kills = p.stats.kills || 0;
+    const deaths = p.stats.deaths || 0;
+    const assists = p.stats.assists || 0;
+    const acs = Math.round((p.stats.score || 0) / rounds);
+    const totalShots = (p.stats.headshots || 0) + (p.stats.bodyshots || 0) + (p.stats.legshots || 0);
+    const hsPct = totalShots > 0 ? Math.round((p.stats.headshots / totalShots) * 100) : 0;
+    const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
+    const agent = p.character || '—';
+    return { kills, deaths, assists, acs, hsPct, kd, agent };
+}
+
 // --- MATCH UI RENDERER (FINAL RR FIX) ---
 function renderRosterMatchRow(entry, selectedSet) {
     const matchData = entry.match || {};
@@ -728,8 +748,7 @@ function renderRosterMatchRow(entry, selectedSet) {
         else if (outcome === 'loss') matchClass = 'loss';
     }
 
-    // 4. SCORE SORTING (The missing variable is back!)
-    let score = "-";
+    // 4. SCORE SORTING
     let redRounds = 0, blueRounds = 0;
 
     if (Array.isArray(matchData.teams)) {
@@ -740,72 +759,139 @@ function renderRosterMatchRow(entry, selectedSet) {
         redRounds = matchData.teams.red.rounds_won; blueRounds = matchData.teams.blue.rounds_won;
     }
 
-    if (redRounds !== 0 || blueRounds !== 0) {
-        const higher = Math.max(redRounds, blueRounds);
-        const lower = Math.min(redRounds, blueRounds);
-        
-        if (matchClass === 'win') {
-            score = `<span style="color: #00ff64">${higher}</span> - <span style="color: #ff4655">${lower}</span>`;
-        } else if (matchClass === 'loss') {
-            score = `<span style="color: #ff4655">${lower}</span> - <span style="color: #00ff64">${higher}</span>`;
-        } else {
-            score = `<span style="color: #aaaaaa">${blueRounds} - ${redRounds}</span>`;
-        }
+    const hasScore = redRounds !== 0 || blueRounds !== 0;
+    const higher = Math.max(redRounds, blueRounds);
+    const lower = Math.min(redRounds, blueRounds);
+
+    let scoreHTML;
+    if (!hasScore) {
+        scoreHTML = `<div class="score-main"><span class="s-dash">—</span></div>`;
+    } else if (matchClass === 'win') {
+        scoreHTML = `<div class="score-main"><span class="s-win">${higher}</span><span class="s-dash">—</span><span class="s-loss">${lower}</span></div>`;
+    } else if (matchClass === 'loss') {
+        scoreHTML = `<div class="score-main"><span class="s-loss">${lower}</span><span class="s-dash">—</span><span class="s-win">${higher}</span></div>`;
+    } else {
+        scoreHTML = `<div class="score-main"><span>${redRounds}</span><span class="s-dash">—</span><span>${blueRounds}</span></div>`;
     }
 
-    //4.5 Get stats
-    const myStats = getPlayerStats(matchData, targetFred.puuid); // Assuming you added puuid to targetFred!
+    const scoreMetaLabel = matchClass === 'win' ? 'Victoire' : matchClass === 'loss' ? 'Défaite' : '—';
+    const scoreMetaClass = matchClass === 'win' ? 'win' : matchClass === 'loss' ? 'loss' : '';
 
-    let statsHTML = "";
+    // 4.5 Get stats
+    const myStats = getPlayerStats(matchData, targetFred.puuid);
+
+    let statsColHTML = '';
     if (myStats) {
-        statsHTML = `
-<div style="color: #aaaaaa; font-size: 0.85rem; font-family: 'Orbitron', sans-serif;">
-<span style="color: white; font-weight: bold;">${myStats.kda}</span> KDA 
-<span style="margin: 0 8px;">|</span> 
-<span style="color: white; font-weight: bold;">${myStats.acs}</span> ACS
-</div>
-`;
+        statsColHTML = `<div class="team-name">${escapeHtml(String(myStats.kda))}</div><div class="team-tag">${escapeHtml(String(myStats.acs))} ACS</div>`;
     }
 
-    // 5. BUILD THE RR DISPLAY
-    let rrHTML = `<div style="width: 80px;"></div>`; 
-    if (rrDelta !== null) {
-        const sign = rrDelta > 0 ? "+" : "";
-        const rrColor = rrDelta > 0 ? "#00ff64" : rrDelta < 0 ? "#ff4655" : "#aaaaaa";
-        rrHTML = `<div style="color: ${rrColor}; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.1rem; width: 80px; text-align: right;">${sign}${rrDelta} RR</div>`;
+    // 5. RR display
+    let rrLabel = '—';
+    if (rrDelta !== null && isCompetitiveMode(mode)) {
+        const sign = rrDelta > 0 ? '+' : '';
+        rrLabel = `${sign}${rrDelta} RR`;
     } else if (isCompetitiveMode(mode)) {
-        rrHTML = `<div style="color: #aaaaaa; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.1rem; width: 80px; text-align: right;">RR —</div>`;
+        rrLabel = 'RR —';
     }
 
-    // 6. ROSTER HTML (Highlights the active player)
-    let rosterHTML = "";
-    if (roster.length > 0) {
-        const names = roster.map(r => {
-            if (targetFred && r.name === targetFred.name) {
-                return `<span style="color: #fff; font-weight: bold;">${escapeHtml(r.name)}</span>`;
-            }
-            return escapeHtml(r.name);
-        }).join(', ');
-        rosterHTML = `<div style="color: #00d4ff; font-size: 0.8rem; margin-bottom: 4px; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px;">👥 ${names}</div>`;
+    // 6. Player / roster display
+    const playerInitials = targetFred ? String(targetFred.name || '?').slice(0, 2).toUpperCase() : '??';
+    const playerName = targetFred ? escapeHtml(targetFred.name) : '—';
+    const teammates = roster
+        .filter(r => !targetFred || r.name !== targetFred.name)
+        .map(r => escapeHtml(r.name)).join(', ');
+    const teammatesHTML = teammates ? `<div class="team-tag">👥 ${teammates}</div>` : '';
+
+    // 7. Scoreboard rows for all players in match, grouped by team
+    let allPlayers = matchData.players;
+    if (allPlayers && !Array.isArray(allPlayers) && allPlayers.all_players) allPlayers = allPlayers.all_players;
+    if (!Array.isArray(allPlayers)) allPlayers = [];
+
+    const rosterNames = new Set(roster.map(r => r.name.toLowerCase()));
+    const rounds = (meta.rounds_played > 0 ? meta.rounds_played : null) || allPlayers.reduce((max, p) => {
+        const s = p.stats || {};
+        return Math.max(max, (s.kills || 0) + (s.deaths || 0) > 0 ? (matchData.metadata?.rounds_played || 1) : 1);
+    }, 1);
+    const roundCount = (matchData.metadata?.rounds_played > 0 ? matchData.metadata.rounds_played : 1);
+
+    function buildPlayerRow(p) {
+        const s = p.stats || {};
+        const kills = s.kills || 0;
+        const deaths = s.deaths || 0;
+        const assists = s.assists || 0;
+        const acs = Math.round((s.score || 0) / roundCount);
+        const totalShots = (s.headshots || 0) + (s.bodyshots || 0) + (s.legshots || 0);
+        const hsPct = totalShots > 0 ? Math.round((s.headshots / totalShots) * 100) : 0;
+        const kd = deaths === 0 ? kills.toFixed(2) : (kills / deaths).toFixed(2);
+        const kdClass = parseFloat(kd) >= 1 ? 'stat-kd-pos' : 'stat-kd-neg';
+        const agent = p.character || '—';
+        const name = p.name || p.gameName || '—';
+        const initials = String(name).slice(0, 2).toUpperCase();
+        const isRoster = rosterNames.has(String(name).toLowerCase());
+        return `<tr${isRoster ? ' class="roster-highlight"' : ''}>
+            <td><div class="player-name"><div class="player-avatar">${escapeHtml(initials)}</div>${escapeHtml(name)}</div></td>
+            <td><span class="agent-badge">${escapeHtml(agent)}</span></td>
+            <td class="stat-acs">${acs}</td>
+            <td>${kills}</td>
+            <td>${deaths}</td>
+            <td>${assists}</td>
+            <td class="${kdClass}">${kd}</td>
+            <td>${hsPct}%</td>
+        </tr>`;
     }
 
-    // 7. ASSEMBLE HTML
-    const li = document.createElement('li');
-    li.className = `match-row ${matchClass}`;
-    const borderColor = matchClass === 'win' ? '#00ff64' : matchClass === 'loss' ? '#ff4655' : '#aaaaaa';
-    li.style.cssText = `display: flex; flex-direction: column; padding: 12px 20px; border-bottom: 1px solid rgba(255,255,255,0.05); margin-bottom: 8px; background: rgba(0,0,0,0.3); border-left: 4px solid ${borderColor}; border-radius: 4px;`;
-    
+    // Determine FRED's team from the targetFred player entry
+    let fredTeam = null;
+    if (targetFred) {
+        const fredEntry = allPlayers.find(p => (p.name || p.gameName || '').toLowerCase() === targetFred.name.toLowerCase());
+        if (fredEntry) fredTeam = fredEntry.team;
+    }
+
+    const fredSide = allPlayers.filter(p => p.team === fredTeam).sort((a, b) => Math.round((b.stats?.score || 0) / roundCount) - Math.round((a.stats?.score || 0) / roundCount));
+    const enemySide = allPlayers.filter(p => p.team !== fredTeam).sort((a, b) => Math.round((b.stats?.score || 0) / roundCount) - Math.round((a.stats?.score || 0) / roundCount));
+
+    const fredLabel = `<tr><td colspan="8" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);background:rgba(0,212,255,.06)">Notre équipe</td></tr>`;
+    const enemyLabel = `<tr><td colspan="8" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(200,216,240,.4);background:rgba(255,70,85,.04)">Adversaires</td></tr>`;
+
+    const scoreboardRows = allPlayers.length > 0
+        ? fredLabel + fredSide.map(buildPlayerRow).join('') + enemyLabel + enemySide.map(buildPlayerRow).join('')
+        : '';
+
+    // 8. ASSEMBLE using premier.css classes
+    const li = document.createElement('div');
+    li.className = `match-card${matchClass !== 'draw' ? ' ' + matchClass : ''}`;
+    li.setAttribute('onclick', 'toggleCard(this)');
     li.innerHTML = `
-        ${rosterHTML}
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div class="match-info" style="flex: 1;">
-                <strong style="color: white; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; text-transform: uppercase;">${escapeHtml(mapName)}</strong>
-                <span style="color: rgba(255,255,255,0.4); font-size: 0.85rem; margin-left: 10px; text-transform: uppercase;">${escapeHtml(mode)}</span>
+        <div class="match-summary">
+            <div class="match-date">
+                ${escapeHtml(mapName)}
+                <span>${escapeHtml(mode)}</span>
             </div>
-            <div class="match-score" style="color: white; font-weight: bold; font-family: 'Orbitron', sans-serif; font-size: 1.25rem; letter-spacing: 2px; text-align: center; flex: 1;">
-                ${score}
+            <div class="team-info">
+                <div class="team-logo">${escapeHtml(playerInitials)}</div>
+                <div>
+                    <div class="team-name">${playerName}</div>
+                    ${teammatesHTML}
+                </div>
             </div>
-            ${rrHTML}
+            <div class="score-block">
+                ${scoreHTML}
+                <div class="score-meta ${scoreMetaClass}">${scoreMetaLabel}</div>
+            </div>
+            <div class="team-info">
+                <div>${statsColHTML}</div>
+            </div>
+            <div class="match-format">
+                <span class="format-tag${rrDelta !== null && rrDelta > 0 ? ' rr-gain' : rrDelta !== null && rrDelta < 0 ? ' rr-loss' : ''}">${escapeHtml(rrLabel)}</span>
+            </div>
+        </div>
+        <div class="match-details">
+            <div class="stats-panel active">
+                <table class="player-table">
+                    <thead><tr><th>Joueur</th><th>Agent</th><th>ACS</th><th>K</th><th>D</th><th>A</th><th>K/D</th><th>HS%</th></tr></thead>
+                    <tbody>${scoreboardRows || '<tr><td colspan="8" style="text-align:center;color:rgba(200,216,240,.3);padding:1rem">Aucune donnée disponible</td></tr>'}</tbody>
+                </table>
+            </div>
         </div>
     `;
 
