@@ -23,15 +23,15 @@ func radioDropReward() int {
 	roll := rand.Float64()
 	switch {
 	case roll < 0.35:
-		return 200
+		return 100
 	case roll < 0.65:
-		return 250
+		return 150
 	case roll < 0.85:
-		return 450
+		return 300
 	case roll < 0.95:
-		return 600
-	default:
 		return 500
+	default:
+		return 100
 	}
 }
 
@@ -72,7 +72,7 @@ func StartRadioDropScheduler() {
 
 			minInterval := db.GetServerConfigInt("radio_drop_min_interval", 30)
 			maxInterval := db.GetServerConfigInt("radio_drop_max_interval", 60)
-			windowSec := db.GetServerConfigInt("radio_drop_window_sec", 120)
+			windowSec := db.GetServerConfigInt("radio_drop_window_sec", 60)
 			now := time.Now().UTC()
 
 			var lastRevealAt string
@@ -110,7 +110,7 @@ func StartRadioDropScheduler() {
 			ft := radioDropReward()
 			revealStr := scheduleAfter.Format(time.RFC3339)
 			res, dbErr := db.DB.Exec(
-				"INSERT INTO radio_drops (reward_ft, max_uses, reveal_at, window_seconds) VALUES (?, 1, ?, ?)",
+				"INSERT INTO radio_drops (reward_ft, max_uses, reveal_at, window_seconds) VALUES (?, 999, ?, ?)",
 				ft, revealStr, windowSec)
 			if dbErr != nil {
 				log.Printf("[Radio Scheduler] DB insert failed: %v — retrying in 1 min", dbErr)
@@ -152,7 +152,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			return
 		}
 		if req.MaxUses <= 0 {
-			req.MaxUses = 1
+			req.MaxUses = 999
 		}
 		if req.WindowSeconds <= 0 {
 			req.WindowSeconds = 60
