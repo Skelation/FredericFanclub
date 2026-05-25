@@ -27,9 +27,9 @@ func radioDropReward() int {
 	case roll < 0.65:
 		return 150
 	case roll < 0.85:
-		return 300
+		return 200
 	case roll < 0.95:
-		return 500
+		return 250
 	default:
 		return 100
 	}
