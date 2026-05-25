@@ -188,28 +188,38 @@ POST /api/admin/set-pack-season    — change the active pack season
 
 ## Next Steps
 
-### 1. More Incentive to Get Cards
+### 1. Minigames Page (`/minigames`)
 
-Multiple angles — pick what fits the economy:
+A dedicated minigames page where players earn Freddy Tokens. One minigame is **featured each week** (rotates every Monday, set in `server_config` or hardcoded schedule) and awards 1.5× FT. All minigames enforce daily limits server-side.
 
-**A. Collection Milestone Rewards (Catalog completion bonuses)**
-- When a player unlocks N% of a season's cards (e.g., 25%, 50%, 75%, 100%), they receive FT or a guaranteed-rarity pack
-- Frontend: show progress bar in `catalog.html` with milestone markers; animate a reward modal on crossing thresholds
-- Backend: track `collection_milestones` table, check on every card unlock/shred
+#### Card Flip Memory
+- Classic 4×4 memory card matching game using FRED cards pulled from `/api/catalog`
+- Timed — faster completion = more FT
+- Daily attempt limit: 3 tries, best score counts
+- Rewards: 50–200 FT based on completion time
 
-**B. "Set Completion" Bonus**
-- Owning all cards of a specific rarity tier in a season grants a special badge or FT bonus
-- Visible in catalog with a "COMPLETE" stamp UI treatment
+#### Callout Drop
+- A Valorant map screenshot is shown with a red dot marking a location
+- Player types the callout name; server checks against a stored answer list
+- 5 locations per session, one session per day
+- Rewards: 20 FT per correct answer (max 100 FT/day)
 
-**C. Showcase / Profile Integration** *(backend implemented — `user_showcase` table, `/api/user/showcase` endpoints)*
-- Frontend integration: display showcase card on leaderboard entries
-- Adds status incentive without inflating FT economy
+#### Last Click Standing
+- A shared 2-hour countdown timer visible to all players
+- FT tiers unlock as time ticks down — less time remaining = higher reward:
+  | Time Remaining | Reward |
+  |----------------|--------|
+  | 2:00 – 1:00    | 75 FT  |
+  | 1:00 – 0:30    | 150 FT |
+  | 0:30 – 0:10    | 350 FT |
+  | 0:10 – 0:02    | 750 FT |
+  | Last 2 min     | 1500 FT |
+- When any player claims, they lock in their tier and the timer resets to 2 hours for everyone else
+- **Only runs during active hours (09:00–23:00)** — timer pauses outside this window so it doesn't idle overnight
+- Each player can claim once per day (20-hour cooldown enforced server-side via timestamp)
+- Live panel shows who has already claimed and which tier they received
+- New tables: `last_click_claims` (user_id, claimed_at, ft_earned)
 
-**D. Card-Gated Features**
-- Small quality-of-life perks tied to card ownership (e.g., owning a player's card shows their stats badge in match history)
-- Non-economic incentive that doesn't break token balance
-
-**E. Suggest other Features**
 
 ---
 
