@@ -102,12 +102,12 @@ func Init() {
 	)`)
 	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('current_pack_season', 'Season 1')`)
 	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_enabled',      'true')`)
-	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_min_interval', '15')`)
-	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_max_interval', '40')`)
-	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_window_sec',   '420')`)
-	DB.Exec(`UPDATE server_config SET value = '15' WHERE key = 'radio_drop_min_interval' AND CAST(value AS INTEGER) > 15`)
-	DB.Exec(`UPDATE server_config SET value = '40' WHERE key = 'radio_drop_max_interval' AND CAST(value AS INTEGER) > 40`)
-	DB.Exec(`UPDATE server_config SET value = '420' WHERE key = 'radio_drop_window_sec' AND CAST(value AS INTEGER) < 420`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_min_interval', '50')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_max_interval', '80')`)
+	DB.Exec(`INSERT OR IGNORE INTO server_config (key, value) VALUES ('radio_drop_window_sec',   '60')`)
+	DB.Exec(`UPDATE server_config SET value = '50' WHERE key = 'radio_drop_min_interval' AND CAST(value AS INTEGER) > 50`)
+	DB.Exec(`UPDATE server_config SET value = '80' WHERE key = 'radio_drop_max_interval' AND CAST(value AS INTEGER) > 80`)
+	DB.Exec(`UPDATE server_config SET value = '60' WHERE key = 'radio_drop_window_sec'`)
 
 	DB.Exec(`CREATE TABLE IF NOT EXISTS redeem_codes (
 		code        TEXT PRIMARY KEY,
@@ -144,7 +144,7 @@ func Init() {
 		max_uses       INTEGER NOT NULL DEFAULT 100,
 		uses_so_far    INTEGER NOT NULL DEFAULT 0,
 		reveal_at      TEXT NOT NULL,
-		window_seconds INTEGER NOT NULL DEFAULT 420,
+		window_seconds INTEGER NOT NULL DEFAULT 60
 		created_at     TEXT DEFAULT CURRENT_TIMESTAMP
 	)`)
 
