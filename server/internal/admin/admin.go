@@ -99,7 +99,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 			return
 		}
 		if req.MaxUses <= 0 {
-			req.MaxUses = 1
+			req.MaxUses = 99
 		}
 		if req.ExpiresAt == "" {
 			req.ExpiresAt = time.Now().UTC().AddDate(0, 0, 7).Format("2006-01-02T15:04:05Z")

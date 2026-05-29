@@ -70,8 +70,8 @@ func StartRadioDropScheduler() {
 				continue
 			}
 
-			minInterval := db.GetServerConfigInt("radio_drop_min_interval", 50)
-			maxInterval := db.GetServerConfigInt("radio_drop_max_interval", 80)
+			minInterval := db.GetServerConfigInt("radio_drop_min_interval", 70)
+			maxInterval := db.GetServerConfigInt("radio_drop_max_interval", 100)
 			windowSec := db.GetServerConfigInt("radio_drop_window_sec", 60)
 			now := time.Now().UTC()
 
