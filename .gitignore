@@ -27,3 +27,5 @@ Thumbs.db
 frontend/images/cards
 
 CLAUDE.md
+
+docker-compose.yml
