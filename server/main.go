@@ -73,6 +73,21 @@ func main() {
 	mux.Handle("/login.html", fs)
 	mux.Handle("/css/", fs)
 	mux.Handle("/images/", fs)
+	// admin page is restricted to heribio only
+	mux.HandleFunc("GET /admin.html", func(w http.ResponseWriter, r *http.Request) {
+		userID := middleware.GetUserIDFromCookie(r)
+		if userID == "" {
+			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+			return
+		}
+		var username string
+		db.DB.QueryRow("SELECT username FROM users WHERE discord_id = ?", userID).Scan(&username)
+		if strings.ToLower(username) != "heribio" {
+			http.Redirect(w, r, "/login.html?error=forbidden", http.StatusSeeOther)
+			return
+		}
+		fs.ServeHTTP(w, r)
+	})
 	// everything else requires a valid session
 	mux.Handle("/", middleware.RequireAuth(fs))
 

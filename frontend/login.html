@@ -105,9 +105,12 @@
 
   <script>
     const params = new URLSearchParams(window.location.search);
+    const box = document.getElementById('error-box');
     if (params.get('error') === 'not_registered') {
-      const box = document.getElementById('error-box');
       box.textContent = 'Your Discord account is not registered. This site is invite-only — contact an admin to get access.';
+      box.style.display = 'block';
+    } else if (params.get('error') === 'forbidden') {
+      box.textContent = 'Access denied. This page is restricted.';
       box.style.display = 'block';
     }
   </script>

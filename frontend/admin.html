@@ -9,6 +9,7 @@
         input, select, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
         button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; }
 
+
         /* User search dropdown */
         .search-wrap { position: relative; margin-bottom: 15px; }
         .search-wrap input { margin-bottom: 0; }
@@ -177,7 +178,7 @@
     <script>
         function getApiBase() {
             if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-                return "http://localhost:8080";
+                return window.location.origin;
             }
             return "https://api.fredericfan.club";
         }
