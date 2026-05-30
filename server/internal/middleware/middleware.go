@@ -4,6 +4,8 @@ import (
 	"log"
 	"net/http"
 	"strings"
+
+	"fredericfanclub/server/internal/db"
 )
 
 func ApplyCORS(w http.ResponseWriter, r *http.Request, allowed []string) {
@@ -35,6 +37,8 @@ func ParseOrigins(raw string) []string {
 		return []string{
 			"http://localhost:3000",
 			"http://127.0.0.1:3000",
+			"http://localhost:8080",
+			"http://127.0.0.1:8080",
 			"https://fredericfan.club",
 			"https://www.fredericfan.club",
 		}
@@ -56,4 +60,21 @@ func GetUserIDFromCookie(r *http.Request) string {
 		return ""
 	}
 	return cookie.Value
+}
+
+func RequireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		userID := GetUserIDFromCookie(r)
+		if userID == "" {
+			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+			return
+		}
+		exists, err := db.UserExists(userID)
+		if err != nil || !exists {
+			http.SetCookie(w, &http.Cookie{Name: "fred_user_id", MaxAge: -1, Path: "/"})
+			http.Redirect(w, r, "/login.html", http.StatusSeeOther)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

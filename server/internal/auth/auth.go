@@ -66,13 +66,20 @@ func RegisterRoutes(mux *http.ServeMux) {
 			return
 		}
 
-		_, err = db.DB.Exec(`
-			INSERT INTO users (discord_id, username, avatar_url, fredtokens)
-			VALUES (?, ?, ?, 1000)
-			ON CONFLICT(discord_id) DO UPDATE SET
-				username=excluded.username,
-				avatar_url=excluded.avatar_url`,
-			discordUser.ID, discordUser.Username, discordUser.Avatar)
+		exists, err := db.UserExists(discordUser.ID)
+		if err != nil {
+			log.Println("DB Error checking user:", err)
+			http.Error(w, "Database error", http.StatusInternalServerError)
+			return
+		}
+		if !exists {
+			http.Redirect(w, r, "/login.html?error=not_registered", http.StatusSeeOther)
+			return
+		}
+
+		_, err = db.DB.Exec(
+			`UPDATE users SET username = ?, avatar_url = ? WHERE discord_id = ?`,
+			discordUser.Username, discordUser.Avatar, discordUser.ID)
 		if err != nil {
 			log.Println("DB Error:", err)
 			http.Error(w, "Database error", http.StatusInternalServerError)
@@ -81,7 +88,11 @@ func RegisterRoutes(mux *http.ServeMux) {
 
 		frontendURL := strings.TrimSpace(os.Getenv("FRONTEND_URL"))
 		if frontendURL == "" {
-			frontendURL = "https://fredericfan.club"
+			port := strings.TrimSpace(os.Getenv("PORT"))
+			if port == "" {
+				port = "3000"
+			}
+			frontendURL = "http://localhost:" + port
 		}
 
 		isDev := strings.Contains(frontendURL, "localhost") || strings.Contains(frontendURL, "127.0.0.1")

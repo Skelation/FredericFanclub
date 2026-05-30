@@ -191,6 +191,12 @@ func CheckAndAwardBetBadges(discordID string) {
 	}
 }
 
+func UserExists(discordID string) (bool, error) {
+	var count int
+	err := DB.QueryRow("SELECT COUNT(1) FROM users WHERE discord_id = ?", discordID).Scan(&count)
+	return count > 0, err
+}
+
 func CheckAndAwardSeasonBadge(discordID, season string) {
 	var totalCards, ownedCards int
 	DB.QueryRow("SELECT COUNT(*) FROM cards WHERE season = ?", season).Scan(&totalCards)

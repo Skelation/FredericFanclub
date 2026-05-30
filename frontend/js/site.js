@@ -1,7 +1,7 @@
 // --- AUTO ENVIRONMENT DETECTOR ---
 function getApiBase() {
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-        return "http://localhost:8080";
+        return window.location.origin;
     }
     return "https://api.fredericfan.club";
 }

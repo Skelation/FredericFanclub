@@ -42,7 +42,11 @@ func main() {
 	}
 	port := strings.TrimSpace(os.Getenv("PORT"))
 	if port == "" {
-		port = "8080"
+		port = "3000"
+	}
+	frontendDir := strings.TrimSpace(os.Getenv("FRONTEND_DIR"))
+	if frontendDir == "" {
+		frontendDir = "../frontend"
 	}
 	allowed := middleware.ParseOrigins(os.Getenv("CORS_ORIGINS"))
 
@@ -63,6 +67,14 @@ func main() {
 	betting.RegisterRoutes(mux, allowed)
 	admin.RegisterRoutes(mux, allowed, base, apiKey)
 	matches.RegisterRoutes(mux, allowed, base, matchPath, apiKey)
+
+	fs := http.FileServer(http.Dir(frontendDir))
+	// login page and its assets are public so unauthenticated users can see the login UI
+	mux.Handle("/login.html", fs)
+	mux.Handle("/css/", fs)
+	mux.Handle("/images/", fs)
+	// everything else requires a valid session
+	mux.Handle("/", middleware.RequireAuth(fs))
 
 	srv := &http.Server{
 		Addr:              ":" + port,
