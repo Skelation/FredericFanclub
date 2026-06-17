@@ -72,12 +72,14 @@ type MatchData struct {
 	} `json:"metadata"`
 	Players struct {
 		AllPlayers []struct {
-			PUUID     string `json:"puuid"`
-			Name      string `json:"name"`
-			Tag       string `json:"tag"`
-			Team      string `json:"team"`
-			Character string `json:"character"`
-			Stats     struct {
+			PUUID          string `json:"puuid"`
+			Name           string `json:"name"`
+			Tag            string `json:"tag"`
+			Team           string `json:"team"`
+			Character      string `json:"character"`
+			DamageMade     int    `json:"damage_made"`
+			DamageReceived int    `json:"damage_received"`
+			Stats          struct {
 				Kills     int `json:"kills"`
 				Deaths    int `json:"deaths"`
 				Assists   int `json:"assists"`
@@ -95,10 +97,14 @@ type MatchData struct {
 		} `json:"roster"`
 	} `json:"teams"`
 	Kills []struct {
-		KillerPUUID     string `json:"killer_puuid"`
-		VictimPUUID     string `json:"victim_puuid"`
-		VictimTeam      string `json:"victim_team"`
-		Assistants      []struct {
+		KillerPUUID       string `json:"killer_puuid"`
+		KillerDisplayName string `json:"killer_display_name"`
+		KillerTeam        string `json:"killer_team"`
+		VictimPUUID       string `json:"victim_puuid"`
+		VictimDisplayName string `json:"victim_display_name"`
+		VictimTeam        string `json:"victim_team"`
+		WeaponName        string `json:"damage_weapon_name"`
+		Assistants        []struct {
 			AssistantPUUID string `json:"assistant_puuid"`
 		} `json:"assistants"`
 		Round           int `json:"round"`
@@ -106,6 +112,8 @@ type MatchData struct {
 	} `json:"kills"`
 	Rounds []struct {
 		WinningTeam string `json:"winning_team"`
+		EndType     string `json:"end_type"`
+		BombPlanted bool   `json:"bomb_planted"`
 	} `json:"rounds"`
 }
 
@@ -115,10 +123,18 @@ type AgentStat struct {
 	Matches   int    `json:"matches"`
 }
 
+type WeaponStat struct {
+	WeaponName string `json:"weapon"`
+	Kills      int    `json:"kills"`
+}
+
 type PlayerOverview struct {
 	Name               string      `json:"name"`
 	Matches            int         `json:"matches"`
+	Wins               int         `json:"wins"`
+	WinRate            float64     `json:"win_rate"`
 	AverageACS         float64     `json:"average_acs"`
+	ADR                float64     `json:"adr"`
 	KD                 float64     `json:"kd"`
 	HeadshotPercentage float64     `json:"headshot_percentage"`
 	Kills              int         `json:"kills"`
@@ -127,7 +143,8 @@ type PlayerOverview struct {
 	FirstDeaths        int         `json:"first_deaths"`
 	Clutches           int         `json:"clutches"`
 	KAST               float64     `json:"kast"`
-	TopAgents          []AgentStat `json:"top_agents"`
+	TopAgents          []AgentStat  `json:"top_agents"`
+	TopWeapons         []WeaponStat `json:"top_weapons"`
 }
 
 type MapStats struct {
@@ -168,8 +185,10 @@ type DashboardData struct {
 
 type aggPlayerStats struct {
 	Matches        int
+	Wins           int
 	RoundsPlayed   int
 	TotalScore     int
+	TotalDamage    int
 	Kills          int
 	Deaths         int
 	Assists        int
@@ -181,6 +200,7 @@ type aggPlayerStats struct {
 	Clutches       int
 	KASTEvents     int
 	AgentsPlayed   map[string]int
+	WeaponKills    map[string]int
 }
 
 // Helper methods
@@ -289,6 +309,7 @@ func GenerateTeamStats(targetPlayers []string) {
 
 		teamCounts := make(map[string]int)
 		playerTeams := make(map[string]string)
+		puuidToName := make(map[string]string)
 		for _, p := range match.Players.AllPlayers {
 			fullName := fmt.Sprintf("%s#%s", p.Name, p.Tag)
 
@@ -297,9 +318,27 @@ func GenerateTeamStats(targetPlayers []string) {
 			}
 
 			playerTeams[p.PUUID] = p.Team
+			puuidToName[p.PUUID] = fullName
 			if isTarget(fullName, targetPlayers) {
 				teamCounts[p.Team]++
 			}
+		}
+
+		// Weapon kill tracking
+		for _, k := range match.Kills {
+			if k.WeaponName == "" {
+				continue
+			}
+			killerName := puuidToName[k.KillerPUUID]
+			if !isTarget(killerName, targetPlayers) {
+				continue
+			}
+			agg := playerAggregates[killerName]
+			if agg.WeaponKills == nil {
+				agg.WeaponKills = make(map[string]int)
+			}
+			agg.WeaponKills[k.WeaponName]++
+			playerAggregates[killerName] = agg
 		}
 
 		ourTeamStr := "Blue"
@@ -453,8 +492,12 @@ func GenerateTeamStats(targetPlayers []string) {
 
 			agg := playerAggregates[fullName]
 			agg.Matches++
+			if match.Teams[strings.ToLower(p.Team)].HasWon {
+				agg.Wins++
+			}
 			agg.RoundsPlayed += roundsPlayed
 			agg.TotalScore += p.Stats.Score
+			agg.TotalDamage += p.DamageMade
 			agg.Kills += p.Stats.Kills
 			agg.Deaths += p.Stats.Deaths
 			agg.Assists += p.Stats.Assists
@@ -509,6 +552,8 @@ func GenerateTeamStats(targetPlayers []string) {
 		}
 
 		avgACS := float64(agg.TotalScore) / float64(agg.RoundsPlayed)
+		adr := float64(agg.TotalDamage) / float64(agg.RoundsPlayed)
+		winRate := float64(agg.Wins) / float64(agg.Matches) * 100.0
 		kd := float64(agg.Kills)
 		if agg.Deaths > 0 {
 			kd = float64(agg.Kills) / float64(agg.Deaths)
@@ -536,10 +581,24 @@ func GenerateTeamStats(targetPlayers []string) {
 			agents = agents[:3]
 		}
 
+		var weapons []WeaponStat
+		for wName, wKills := range agg.WeaponKills {
+			weapons = append(weapons, WeaponStat{WeaponName: wName, Kills: wKills})
+		}
+		sort.Slice(weapons, func(i, j int) bool {
+			return weapons[i].Kills > weapons[j].Kills
+		})
+		if len(weapons) > 5 {
+			weapons = weapons[:5]
+		}
+
 		finalPlayers = append(finalPlayers, PlayerOverview{
 			Name:               name,
 			Matches:            agg.Matches,
+			Wins:               agg.Wins,
+			WinRate:            round2(winRate),
 			AverageACS:         round2(avgACS),
+			ADR:                round2(adr),
 			KD:                 round2(kd),
 			HeadshotPercentage: round2(hsPct),
 			Kills:              agg.Kills,
@@ -549,6 +608,7 @@ func GenerateTeamStats(targetPlayers []string) {
 			Clutches:           agg.Clutches,
 			KAST:               round2(kastPct),
 			TopAgents:          agents,
+			TopWeapons:         weapons,
 		})
 	}
 
@@ -572,5 +632,139 @@ func GenerateTeamStats(targetPlayers []string) {
 		os.MkdirAll("./data/premier", 0755)
 		os.WriteFile(statsFile, outBytes, 0644)
 		log.Println("Stats Generator: Dashboard JSON refreshed in", statsFile)
+	}
+}
+
+// ── RECAP TYPES ──────────────────────────────────────────────────────────────
+
+type recapKillOut struct {
+	Killer     string `json:"k"`
+	KillerTeam string `json:"kt"`
+	Victim     string `json:"v"`
+	Weapon     string `json:"w"`
+}
+
+type recapRoundOut struct {
+	Num     int            `json:"n"`
+	Winner  string         `json:"winner"`
+	EndType string         `json:"end"`
+	Planted bool           `json:"planted"`
+	Kills   []recapKillOut `json:"kills"`
+}
+
+type matchRecapOut struct {
+	Rounds []recapRoundOut `json:"rounds"`
+}
+
+// GenerateRecaps reads archive files and writes condensed per-match round
+// recap files to data/premier/recaps/. Already-generated recaps are skipped.
+func GenerateRecaps() {
+	archiveDir := "./data/premier/archive"
+	recapDir := "./data/premier/recaps"
+	os.MkdirAll(recapDir, 0755)
+
+	files, err := os.ReadDir(archiveDir)
+	if err != nil {
+		log.Println("GenerateRecaps: cannot read archive dir:", err)
+		return
+	}
+
+	generated := 0
+	for _, f := range files {
+		if !strings.HasSuffix(f.Name(), ".json") {
+			continue
+		}
+		matchID := strings.TrimSuffix(f.Name(), ".json")
+		recapPath := filepath.Join(recapDir, matchID+".json")
+
+		// Skip if recap already exists
+		if _, err := os.Stat(recapPath); err == nil {
+			continue
+		}
+
+		data, err := os.ReadFile(filepath.Join(archiveDir, f.Name()))
+		if err != nil {
+			continue
+		}
+
+		var m MatchData
+		if err := json.Unmarshal(data, &m); err != nil {
+			continue
+		}
+
+		// Build PUUID → short display name map
+		puuidShortName := make(map[string]string)
+		for _, p := range m.Players.AllPlayers {
+			puuidShortName[p.PUUID] = p.Name
+		}
+
+		// Index kills by round, sorted by kill time
+		type tempKill struct {
+			killer     string
+			killerTeam string
+			victim     string
+			weapon     string
+			killTime   int
+		}
+		roundKillIdx := make(map[int][]tempKill)
+		for _, k := range m.Kills {
+			weapon := k.WeaponName
+			if weapon == "" {
+				weapon = "Ability"
+			}
+			killer := puuidShortName[k.KillerPUUID]
+			if killer == "" {
+				killer = k.KillerDisplayName
+			}
+			victim := puuidShortName[k.VictimPUUID]
+			if victim == "" {
+				victim = k.VictimDisplayName
+			}
+			roundKillIdx[k.Round] = append(roundKillIdx[k.Round], tempKill{
+				killer:     killer,
+				killerTeam: k.KillerTeam,
+				victim:     victim,
+				weapon:     weapon,
+				killTime:   k.KillTimeInRound,
+			})
+		}
+		for rNum := range roundKillIdx {
+			sort.Slice(roundKillIdx[rNum], func(i, j int) bool {
+				return roundKillIdx[rNum][i].killTime < roundKillIdx[rNum][j].killTime
+			})
+		}
+
+		// Build output rounds
+		rounds := make([]recapRoundOut, len(m.Rounds))
+		for i, r := range m.Rounds {
+			kills := make([]recapKillOut, 0, len(roundKillIdx[i]))
+			for _, k := range roundKillIdx[i] {
+				kills = append(kills, recapKillOut{
+					Killer:     k.killer,
+					KillerTeam: k.killerTeam,
+					Victim:     k.victim,
+					Weapon:     k.weapon,
+				})
+			}
+			rounds[i] = recapRoundOut{
+				Num:     i + 1,
+				Winner:  r.WinningTeam,
+				EndType: r.EndType,
+				Planted: r.BombPlanted,
+				Kills:   kills,
+			}
+		}
+
+		out := matchRecapOut{Rounds: rounds}
+		outBytes, err := json.Marshal(out)
+		if err != nil {
+			continue
+		}
+		os.WriteFile(recapPath, outBytes, 0644)
+		generated++
+	}
+
+	if generated > 0 {
+		log.Printf("GenerateRecaps: wrote %d new recap files", generated)
 	}
 }

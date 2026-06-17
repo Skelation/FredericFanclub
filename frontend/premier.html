@@ -41,19 +41,26 @@
     </header>
 
     <main class="container">
+        <!-- ══ 0. TEAM OVERVIEW ══ -->
+        <div class="section-heading">Vue d'ensemble <span>Saison actuelle</span></div>
+        <div class="team-overview-banner" id="teamOverviewBanner"></div>
+
         <!-- ══ 1. PLAYER STATS ══ -->
         <div class="section-heading" id="playerStatsHeading">Performances joueurs <span>Chargement...</span></div>
 
         <div class="stat-toggle">
             <button class="stat-pill active" onclick="setStat(this,'average_acs')">ACS</button>
+            <button class="stat-pill" onclick="setStat(this,'adr')">ADR</button>
             <button class="stat-pill" onclick="setStat(this,'kd')">K/D</button>
             <button class="stat-pill" onclick="setStat(this,'headshot_percentage')">HS%</button>
             <button class="stat-pill" onclick="setStat(this,'first_bloods')">First Bloods</button>
             <button class="stat-pill" onclick="setStat(this,'first_deaths')">First Deaths</button>
             <button class="stat-pill" onclick="setStat(this,'clutches')">Clutches</button>
             <button class="stat-pill" onclick="setStat(this,'kast')">KAST%</button>
+            <button class="stat-pill stat-pill--fred" onclick="setStat(this,'freddo_score')">Freddo Score</button>
         </div>
 
+        <div class="kill-podium" id="statPodium"></div>
         <div class="player-cards" id="playerCards"></div>
         <div class="player-detail-panel" id="playerDetail"></div>
 
@@ -64,6 +71,14 @@
         <div class="section-heading">Performances marquantes <span>Ce split</span></div>
         <div class="perf-grid" id="perfGrid" style="margin-bottom:1rem;">
             </div>
+
+        <!-- ══ 3b. RÔLES & DISTINCTIONS ══ -->
+        <div class="section-heading">Rôles &amp; Distinctions <span>Héros méconnus &amp; moments difficiles</span></div>
+        <div class="dist-grid" id="distinctionsGrid"></div>
+
+        <!-- ══ 3c. STATS TABLE ══ -->
+        <div class="section-heading">Tableau des statistiques <span>Tous les joueurs</span></div>
+        <div class="stats-table-wrap" id="statsTableWrap" style="margin-bottom:2rem;"></div>
         <!-- ══ 4. MATCH LIST ══ -->
         <div class="filter-bar">
             <span class="filter-label">Filtrer</span>

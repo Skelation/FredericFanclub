@@ -40,6 +40,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 	// Create our new Two-Tier folder structure
 	os.MkdirAll("./data/premier/archive", 0755) // THE VAULT (Fat files)
 	os.MkdirAll("./data/premier/lite", 0755)    // THE CACHE (UI files)
+	os.MkdirAll("./data/premier/recaps", 0755)  // Round recap files (per match)
 
 	ticker := time.NewTicker(10 * time.Minute)
 
@@ -172,6 +173,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 
 			// 6. CALCULATE ADVANCED DASHBOARD STATS
 			GenerateTeamStats(teamRoster)
+			GenerateRecaps()
 		}
 	}()
 }
@@ -216,6 +218,39 @@ func RegisterPremierRoutes(mux *http.ServeMux, allowed []string, applyCORS func(
 			return
 		}
 
+		w.Write(data)
+	})
+
+	mux.HandleFunc("OPTIONS /api/matches/premier/{id}/rounds", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	mux.HandleFunc("GET /api/matches/premier/{id}/rounds", func(w http.ResponseWriter, r *http.Request) {
+		applyCORS(w, r, allowed)
+
+		matchID := r.PathValue("id")
+		// Sanitize: only allow UUID characters (hex + hyphens, 36 chars)
+		if len(matchID) != 36 {
+			http.Error(w, `{"error":"invalid match id"}`, http.StatusBadRequest)
+			return
+		}
+		for _, c := range matchID {
+			if !((c >= 'a' && c <= 'f') || (c >= '0' && c <= '9') || c == '-') {
+				http.Error(w, `{"error":"invalid match id"}`, http.StatusBadRequest)
+				return
+			}
+		}
+
+		recapPath := fmt.Sprintf("./data/premier/recaps/%s.json", matchID)
+		data, err := os.ReadFile(recapPath)
+		if err != nil {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`{"error":"recap not yet generated"}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
 		w.Write(data)
 	})
 }
