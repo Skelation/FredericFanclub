@@ -498,9 +498,10 @@ function renderTeamOverviewBanner(results) {
     const total = wins + losses;
     const winRate = total > 0 ? Math.round((wins / total) * 100) : 0;
 
+    // results is sorted newest-first, so the current streak starts at index 0.
     let streakCount = 1;
-    const streakWon = results[results.length - 1].won;
-    for (let i = results.length - 2; i >= 0; i--) {
+    const streakWon = results[0].won;
+    for (let i = 1; i < results.length; i++) {
         if (results[i].won === streakWon) streakCount++;
         else break;
     }
@@ -508,7 +509,8 @@ function renderTeamOverviewBanner(results) {
     const streakClass = streakWon ? 'cyan' : 'red';
     const winRateClass = winRate >= 60 ? 'green' : winRate < 40 ? 'red' : 'gold';
 
-    const recent = results.slice(-7);
+    // Take the 7 most recent (start of the list), kept newest → oldest left-to-right.
+    const recent = results.slice(0, 7);
     const formDots = recent.map(r =>
         `<span class="form-dot ${r.won ? 'win' : 'loss'}" title="${r.map}">${r.won ? 'W' : 'L'}</span>`
     ).join('');
@@ -525,10 +527,6 @@ function renderTeamOverviewBanner(results) {
         <div class="overview-pill">
             <div class="overview-pill-val ${winRateClass}">${winRate}%</div>
             <div class="overview-pill-lbl">Win Rate</div>
-        </div>
-        <div class="overview-pill">
-            <div class="overview-pill-val ${streakClass}">${streakStr}</div>
-            <div class="overview-pill-lbl">Série en cours</div>
         </div>
         <div class="overview-pill">
             <div class="overview-pill-val">${total}</div>

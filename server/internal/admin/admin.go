@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -15,7 +14,32 @@ import (
 	"fredericfanclub/server/internal/hub"
 	"fredericfanclub/server/internal/matches"
 	"fredericfanclub/server/internal/middleware"
+	"fredericfanclub/server/internal/premier"
 )
+
+// namePart returns the "Name" portion of a "Name#Tag" identity.
+func namePart(s string) string {
+	if i := strings.Index(s, "#"); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+// resolvePlayerName applies the premier alias map to an in-game "Name#Tag" and
+// reports whether the (aliased) identity refers to the requested target player.
+// target may be a full "Name#Tag" or just a "Name"; matching is case-insensitive
+// and tolerant of either form. This mirrors how stats generation resolves
+// players, so a renamed player with an alias entry keeps working for betting.
+func resolvePlayerName(aliasMap map[string]string, name, tag, target string) bool {
+	full := name + "#" + tag
+	if canon, ok := aliasMap[full]; ok {
+		full = canon
+	}
+	if strings.EqualFold(full, target) {
+		return true
+	}
+	return strings.EqualFold(namePart(full), namePart(target))
+}
 
 var fileMutex sync.Mutex
 
@@ -244,51 +268,11 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 		}
 		json.NewDecoder(r.Body).Decode(&req)
 
-		roster := []struct{ Name, Tag string }{
-			{"TheMisterED", "0007"}, {"Heri", "BLUB"}, {"hhj", "8769"},
-			{"Djibはコリーヌ お あいして", "LOVE"}, {"Graussbyt", "5629"},
-			{"Lal6s9gne", "6641"}, {"XTrixツ", "DREAM"}, {"小胖子vincent", "4397"},
-		}
-
-		var playerTag string
-		for _, rp := range roster {
-			if strings.EqualFold(rp.Name, req.Player) {
-				playerTag = rp.Tag
-				break
-			}
-		}
-
-		cacheKey := strings.ToLower(req.Player + "#" + playerTag)
-		targetPuuid := ""
-
-		if val, ok := hub.PuuidCache.Load(cacheKey); ok {
-			targetPuuid = val.(string)
-		} else {
-			accountURL := fmt.Sprintf("%s/v1/account/%s/%s", base, url.PathEscape(req.Player), url.PathEscape(playerTag))
-			reqAcc, _ := http.NewRequest("GET", accountURL, nil)
-			if apiKey != "" {
-				reqAcc.Header.Set("Authorization", apiKey)
-			}
-			respAcc, errAcc := http.DefaultClient.Do(reqAcc)
-			if errAcc == nil && respAcc.StatusCode == 200 {
-				var accData struct {
-					Data struct {
-						Puuid string `json:"puuid"`
-					} `json:"data"`
-				}
-				json.NewDecoder(respAcc.Body).Decode(&accData)
-				targetPuuid = accData.Data.Puuid
-				if targetPuuid != "" {
-					hub.PuuidCache.Store(cacheKey, targetPuuid)
-				}
-				respAcc.Body.Close()
-			}
-		}
-
-		if targetPuuid == "" {
-			http.Error(w, `{"error": "Failed to look up player PUUID for preview."}`, http.StatusBadRequest)
-			return
-		}
+		// Resolve players the same way premier stats generation does: by
+		// (aliased) "Name#Tag" rather than a live account-API PUUID lookup.
+		// This keeps renamed players working as long as an alias entry exists,
+		// instead of breaking when their old Riot ID stops resolving.
+		aliasMap := premier.PublicAliasMap()
 
 		dataBytes := matches.GetCachedData()
 		if len(dataBytes) == 0 {
@@ -315,13 +299,46 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 				allPlayers = pArr
 			}
 
+			// Total rounds played in this match (needed for per-round stats
+			// like ADR). The cache strips the `rounds` array, so derive it from
+			// the team scoreboard instead.
+			matchRounds := 0.0
+			if teamsMap, ok := m.Match["teams"].(map[string]interface{}); ok {
+				for _, t := range teamsMap {
+					if td, ok := t.(map[string]interface{}); ok {
+						rw, _ := td["rounds_won"].(float64)
+						rl, _ := td["rounds_lost"].(float64)
+						if rw+rl > matchRounds {
+							matchRounds = rw + rl
+						}
+					}
+				}
+			} else if teamsArr, ok := m.Match["teams"].([]interface{}); ok {
+				for _, t := range teamsArr {
+					td, ok := t.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					rw, _ := td["rounds_won"].(float64)
+					rl, _ := td["rounds_lost"].(float64)
+					if r, ok := td["rounds"].(map[string]interface{}); ok {
+						rw, _ = r["won"].(float64)
+						rl, _ = r["lost"].(float64)
+					}
+					if rw+rl > matchRounds {
+						matchRounds = rw + rl
+					}
+				}
+			}
+
 			for _, p := range allPlayers {
 				playerMap, ok := p.(map[string]interface{})
 				if !ok {
 					continue
 				}
-				puuid, _ := playerMap["puuid"].(string)
-				if !strings.EqualFold(puuid, targetPuuid) {
+				name, _ := playerMap["name"].(string)
+				tag, _ := playerMap["tag"].(string)
+				if !resolvePlayerName(aliasMap, name, tag, req.Player) {
 					continue
 				}
 
@@ -346,6 +363,13 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 									wins++
 								}
 							}
+						}
+					}
+				} else if req.PropType == "adr" {
+					// Average Damage per Round = total damage / rounds played.
+					if matchRounds > 0 {
+						if dmg, ok := playerMap["damage_made"].(float64); ok {
+							statsHistory = append(statsHistory, dmg/matchRounds)
 						}
 					}
 				} else {

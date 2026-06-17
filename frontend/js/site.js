@@ -1084,7 +1084,7 @@ async function loadBettingMarket() {
             closedArea.style.display = "none";
 
             document.getElementById('propPlayerName').textContent = data.player;
-            document.getElementById('propTypeName').textContent = "Total " + data.prop_type;
+            document.getElementById('propTypeName').textContent = (data.prop_type === 'adr') ? "ADR (per round)" : "Total " + data.prop_type;
             document.getElementById('propLineValue').textContent = Number(data.line.toFixed(2));
             document.getElementById('oddsOver').textContent = data.over_multiplier.toFixed(2) + "x";
             document.getElementById('oddsUnder').textContent = data.under_multiplier.toFixed(2) + "x";
@@ -1139,7 +1139,12 @@ async function loadBettingMarket() {
                     btnUnder.innerHTML = `FRED LOSS (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
                 } else if (data.prop_type === 'kd_ratio') {
                     document.getElementById('propTypeName').textContent = "K/D RATIO"; // Prettify KD!
-                    document.getElementById('propLineValue').parentElement.style.display = 'block'; 
+                    document.getElementById('propLineValue').parentElement.style.display = 'block';
+                    btnOver.innerHTML = `OVER (<span id="oddsOver">${data.over_multiplier.toFixed(2)}x</span>)`;
+                    btnUnder.innerHTML = `UNDER (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
+                } else if (data.prop_type === 'adr') {
+                    document.getElementById('propTypeName').textContent = "ADR (per round)"; // Prettify ADR!
+                    document.getElementById('propLineValue').parentElement.style.display = 'block';
                     btnOver.innerHTML = `OVER (<span id="oddsOver">${data.over_multiplier.toFixed(2)}x</span>)`;
                     btnUnder.innerHTML = `UNDER (<span id="oddsUnder">${data.under_multiplier.toFixed(2)}x</span>)`;
                 } else {

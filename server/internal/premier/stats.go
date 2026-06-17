@@ -53,6 +53,14 @@ func buildAliasMap(entries []AliasEntry) map[string]string {
 	return m
 }
 
+// PublicAliasMap returns the global in-game("Name#Tag") -> canonical("Name#Tag")
+// alias map, loaded from aliases.json. Exposed so other packages (e.g. betting
+// admin) can resolve players the same way stats generation does, which keeps
+// renamed players (alias entries) working everywhere.
+func PublicAliasMap() map[string]string {
+	return buildAliasMap(loadAliasEntries())
+}
+
 func buildReassignmentIndex(entries []ReassignmentEntry) map[string]map[string]string {
 	idx := make(map[string]map[string]string)
 	for _, e := range entries {
