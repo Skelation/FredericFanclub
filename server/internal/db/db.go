@@ -155,7 +155,86 @@ func Init() {
 		PRIMARY KEY (drop_id, discord_id)
 	)`)
 
+	// --- COSMETICS / SHOP ---
+	// Cosmetics are bought with FT and surface on the leaderboard and profiles.
+	// Banners are a CSS background shown behind a player's name; titles are a
+	// coloured tag. Schema matches the existing cosmetics/user_cosmetics/
+	// user_profile tables; CREATE IF NOT EXISTS only takes effect on fresh DBs.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS cosmetics (
+		id          INTEGER PRIMARY KEY AUTOINCREMENT,
+		type        TEXT NOT NULL,                  -- 'banner' | 'title' | ...
+		name        TEXT NOT NULL,
+		value       TEXT NOT NULL,                  -- banner: CSS background; title: display text
+		rarity      TEXT DEFAULT 'bronze',
+		description TEXT DEFAULT '',
+		preview_url TEXT DEFAULT ''
+	)`)
+
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_cosmetics (
+		discord_id  TEXT NOT NULL,
+		cosmetic_id INTEGER NOT NULL,
+		acquired_at TEXT DEFAULT CURRENT_TIMESTAMP,
+		PRIMARY KEY (discord_id, cosmetic_id)
+	)`)
+
+	// Per-user equipped cosmetics + bio.
+	DB.Exec(`CREATE TABLE IF NOT EXISTS user_profile (
+		discord_id TEXT PRIMARY KEY,
+		bio        TEXT NOT NULL DEFAULT '',
+		banner_id  INTEGER,
+		title_id   INTEGER,
+		FOREIGN KEY(discord_id) REFERENCES users(discord_id)
+	)`)
+	// Tolerate older partial user_profile tables that predate these columns,
+	// and make sure every equip slot exists (one column per cosmetic type).
+	// Only banners and titles ("tags") are supported.
+	DB.Exec("ALTER TABLE user_profile ADD COLUMN banner_id INTEGER")
+	DB.Exec("ALTER TABLE user_profile ADD COLUMN title_id INTEGER")
+	DB.Exec("ALTER TABLE user_profile ADD COLUMN bio TEXT NOT NULL DEFAULT ''")
+
 	log.Println("Database initialized successfully!")
+}
+
+// CosmeticPrice maps a cosmetic's rarity to its FT cost. The cosmetics table
+// has no explicit price column, so price is derived from rarity (consistent
+// with the rest of the rarity-driven economy).
+func CosmeticPrice(rarity string) int {
+	switch rarity {
+	case "iron":
+		return 500
+	case "bronze":
+		return 1000
+	case "diamond":
+		return 2500
+	case "ascendant":
+		return 5000
+	case "immortal":
+		return 8000
+	case "radiant":
+		return 12000
+	default:
+		return 1000
+	}
+}
+
+// RarityColor maps a rarity to its display colour (matches the frontend theme).
+func RarityColor(rarity string) string {
+	switch rarity {
+	case "iron":
+		return "#aaaaaa"
+	case "bronze":
+		return "#cd7f32"
+	case "diamond":
+		return "#b982ff"
+	case "ascendant":
+		return "#2bc97e"
+	case "immortal":
+		return "#ff4655"
+	case "radiant":
+		return "#ffea82"
+	default:
+		return "#aaaaaa"
+	}
 }
 
 func GetServerConfigInt(key string, def int) int {

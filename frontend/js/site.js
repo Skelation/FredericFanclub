@@ -6,7 +6,34 @@ function getApiBase() {
     return "https://api.fredericfan.club";
 }
 
+// Build the CSS background "layer" for a banner cosmetic. A value containing
+// "gradient(" is used as-is (a CSS gradient); anything else is treated as an
+// image path/URL (e.g. /images/banners/x.png) and wrapped so it covers the
+// element. Callers layer a dark overlay in front of this where text sits on top.
+function bannerImageCss(value) {
+    if (!value) return '';
+    return /gradient\(/.test(value) ? value : `url('${value}') center/cover no-repeat`;
+}
+
+// Inject the Boutique (shop) link into every page's nav so we don't have to
+// hand-edit each HTML file's hardcoded nav. Runs once the DOM is ready.
+function injectSharedNavLinks() {
+    const navLinks = document.querySelector('.nav-links');
+    if (!navLinks) return;
+    if (!navLinks.querySelector('a[href="shop.html"]')) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = 'shop.html';
+        a.textContent = 'Boutique';
+        if (window.location.pathname.endsWith('shop.html')) a.className = 'nav-active';
+        li.appendChild(a);
+        navLinks.appendChild(li);
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    injectSharedNavLinks();
+
     // --- DYNAMIC DISCORD LOGIN ---
     const loginBtn = document.getElementById('discordLoginBtn');
     if (loginBtn) {
@@ -86,14 +113,15 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.ok) {
                 const user = await res.json();
                 
-                // Replace the Login button with their profile & wallet
+                // Replace the Login button with their profile & wallet.
+                // The whole pill links to the user's own profile page.
                 authContainer.innerHTML = `
-                    <div style="display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.5); padding: 4px 12px 4px 4px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1);">
+                    <a href="profile.html" title="Mon profil" style="text-decoration: none; display: flex; align-items: center; gap: 12px; background: rgba(0,0,0,0.5); padding: 4px 12px 4px 4px; border-radius: 30px; border: 1px solid rgba(255,255,255,0.1); transition: border-color 0.2s;" onmouseover="this.style.borderColor='#00d4ff'" onmouseout="this.style.borderColor='rgba(255,255,255,0.1)'">
                         <img src="${user.avatar_url}" alt="Profile" style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #ff4655;">
                         <span style="font-family: 'Orbitron', sans-serif; color: #00ff64; font-weight: 700; font-size: 0.9rem;">
                             ${Math.round(user.fredtokens * 10) / 10} FT
                         </span>
-                    </div>
+                    </a>
                 `;
                 if (typeof loadBettingMarket === 'function') {
                     if (!skipMarketReload && typeof loadBettingMarket === 'function') {

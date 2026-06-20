@@ -1148,3 +1148,68 @@ footer {
     padding: 4px 8px;
     border-radius: 4px;
 }
+
+/* ===================================================================
+   COSMETIC SITE THEMES (Season 2 — unlockable via Battle Pass)
+   Applied by site.js via document.documentElement.dataset.theme.
+   Each variant overrides the :root design tokens.
+   =================================================================== */
+:root[data-theme="ember"] {
+    --cyan:     #ff6b3d;
+    --cyan-dim: #99371b;
+    --bg:       #100604;
+    --card:     #1f0f08;
+    --border:   rgba(255,107,61,.16);
+    --text:     #f0d8c8;
+}
+:root[data-theme="toxic"] {
+    --cyan:     #39ff85;
+    --cyan-dim: #1b8a45;
+    --bg:       #04100a;
+    --card:     #08200f;
+    --border:   rgba(57,255,133,.16);
+    --text:     #c8f0d8;
+}
+:root[data-theme="radiant"] {
+    --cyan:     #ffd94a;
+    --cyan-dim: #998314;
+    --bg:       #100d04;
+    --card:     #201b08;
+    --border:   rgba(255,217,74,.18);
+    --text:     #f0e8c8;
+}
+:root[data-theme="void"] {
+    --cyan:     #a855f7;
+    --cyan-dim: #5b2d86;
+    --bg:       #0a0410;
+    --card:     #150820;
+    --border:   rgba(168,85,247,.18);
+    --text:     #ddc8f0;
+}
+
+/* ===================================================================
+   CARD FOIL OVERLAY (equipped card_foil cosmetic)
+   Wrap a card render and add the matching foil class.
+   =================================================================== */
+.foil-wrap { position: relative; }
+.foil-wrap.foil-holo::after,
+.foil-wrap.foil-prism::after,
+.foil-wrap.foil-gold::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit;
+    pointer-events: none; mix-blend-mode: screen; z-index: 30;
+    background-size: 200% 200%;
+    animation: foilSheen 3.5s linear infinite;
+}
+.foil-wrap.foil-holo::after {
+    background: linear-gradient(115deg, transparent 20%, rgba(0,212,255,.45) 40%, rgba(168,85,247,.45) 55%, transparent 75%);
+}
+.foil-wrap.foil-prism::after {
+    background: linear-gradient(115deg, transparent 15%, rgba(255,0,128,.4) 35%, rgba(0,255,200,.4) 50%, rgba(255,234,130,.4) 65%, transparent 85%);
+}
+.foil-wrap.foil-gold::after {
+    background: linear-gradient(115deg, transparent 25%, rgba(255,217,74,.55) 45%, rgba(255,255,255,.5) 55%, transparent 75%);
+}
+@keyframes foilSheen {
+    0%   { background-position: 0% 0%; }
+    100% { background-position: 200% 200%; }
+}

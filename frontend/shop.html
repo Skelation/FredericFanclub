@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Boutique - FRED Fanclub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .shop-balance {
+            display: inline-flex; align-items: center; gap: 10px;
+            background: rgba(0,0,0,0.5); border: 1px solid rgba(0,255,100,0.3);
+            padding: 10px 22px; border-radius: 30px; margin: 0 auto;
+            font-family: 'Orbitron', sans-serif; color: #00ff64; font-weight: 700; font-size: 1.1rem;
+        }
+
+        .shop-section-title {
+            font-family: 'Orbitron', sans-serif; font-size: 1.6rem; color: #fff;
+            text-transform: uppercase; letter-spacing: 2px; margin: 50px 0 20px;
+            padding-bottom: 12px; border-bottom: 2px solid rgba(0,212,255,.2);
+        }
+
+        .shop-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 22px;
+        }
+
+        .shop-card {
+            background: #0d1428; border: 1px solid rgba(0,212,255,.13); border-radius: 12px;
+            overflow: hidden; display: flex; flex-direction: column;
+            transition: transform .2s, box-shadow .2s, border-color .2s;
+        }
+        .shop-card:hover { transform: translateY(-4px); box-shadow: 0 12px 30px rgba(0,0,0,.5); }
+
+        .shop-preview {
+            height: 100px; display: flex; align-items: center; justify-content: center;
+            position: relative;
+        }
+        .shop-preview-title {
+            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1.4rem;
+            text-transform: uppercase; letter-spacing: 2px;
+            text-shadow: 0 2px 12px rgba(0,0,0,.8);
+        }
+
+        .shop-card-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; flex: 1; }
+        .shop-card-name { font-family: 'Orbitron', sans-serif; font-size: 1.05rem; color: #fff; }
+        .shop-rarity {
+            font-family: 'Rajdhani', sans-serif; font-size: .8rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 1.5px;
+        }
+        .shop-price { font-family: 'Orbitron', sans-serif; color: #00d4ff; font-weight: 700; font-size: 1.1rem; margin-top: auto; }
+
+        .shop-btn {
+            width: 100%; padding: 11px; border: none; border-radius: 8px; cursor: pointer;
+            font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: .85rem;
+            text-transform: uppercase; letter-spacing: 1px; transition: all .2s;
+        }
+        .shop-btn-buy { background: #00d4ff; color: #001018; }
+        .shop-btn-buy:hover { box-shadow: 0 0 16px rgba(0,212,255,.6); }
+        .shop-btn-buy:disabled { background: #2a3550; color: #6677aa; cursor: not-allowed; box-shadow: none; }
+        .shop-btn-equip { background: transparent; border: 1px solid #00ff64; color: #00ff64; }
+        .shop-btn-equip:hover { background: rgba(0,255,100,.12); }
+        .shop-btn-equipped { background: rgba(0,255,100,.15); border: 1px solid #00ff64; color: #00ff64; }
+        .shop-btn-equipped:hover { background: rgba(255,70,85,.12); border-color: #ff4655; color: #ff4655; }
+
+        .shop-msg { text-align: center; min-height: 22px; font-family: 'Rajdhani', sans-serif; font-weight: 600; margin-top: 14px; }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="matches.html">Matchs</a></li>
+                <li><a href="premier.html">Premier</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html">Betting</a></li>
+                <li><a href="packs.html">Packs</a></li>
+                <li><a href="inventory.html">Inventaire</a></li>
+                <li><a href="catalog.html">Catalogue</a></li>
+                <li><a href="leaderboard.html">Classement</a></li>
+            </ul>
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="page-hero fade-in">
+        <div>
+            <h1>Boutique</h1>
+            <p style="color: #00d4ff; font-family: 'Rajdhani', sans-serif; font-size: 1.2rem; margin-top: 10px;">Sélection du jour — 3 cosmétiques tirés au sort, renouvelés chaque jour</p>
+        </div>
+    </header>
+
+    <main class="container" style="padding-bottom: 100px;">
+        <div style="text-align: center; margin: 20px 0 0;">
+            <div class="shop-balance">💰 <span id="shopBalance">—</span> FT</div>
+        </div>
+        <div id="shopMsg" class="shop-msg"></div>
+
+        <h2 class="shop-section-title" id="shopSectionTitle">🛒 Sélection du jour</h2>
+        <p style="font-family:'Rajdhani',sans-serif;color:#8a98b8;margin:-8px 0 20px;">Achète tes cosmétiques ici, puis équipe-les depuis ton <a href="profile.html" style="color:#00d4ff;">profil</a>.</p>
+
+        <!-- Search + type filter (shown only when the full catalog is available, i.e. dev mode) -->
+        <div id="shopControls" style="display:none; gap:12px; margin-bottom:22px; flex-wrap:wrap;">
+            <input type="text" id="shopSearch" placeholder="Rechercher par nom…" oninput="renderShop()"
+                style="flex:1; min-width:200px; padding:11px 14px; background:#0d1428; border:1px solid rgba(0,212,255,.25); border-radius:8px; color:#fff; font-family:'Rajdhani',sans-serif; font-size:1rem;">
+            <select id="shopTypeFilter" onchange="renderShop()"
+                style="padding:11px 14px; background:#0d1428; border:1px solid rgba(0,212,255,.25); border-radius:8px; color:#fff; font-family:'Rajdhani',sans-serif; font-size:1rem;">
+                <option value="">Tous les types</option>
+                <option value="banner">Bannières</option>
+                <option value="title">Tags</option>
+            </select>
+        </div>
+
+        <div id="shopGrid" class="shop-grid"><p style="color:#888;">Chargement…</p></div>
+    </main>
+
+    <script src="js/site.js"></script>
+    <script>
+        const RARITY = {
+            iron:      { color: '#aaaaaa', label: 'Iron' },
+            bronze:    { color: '#cd7f32', label: 'Bronze' },
+            diamond:   { color: '#b982ff', label: 'Diamond' },
+            ascendant: { color: '#2bc97e', label: 'Ascendant' },
+            immortal:  { color: '#ff4655', label: 'Immortal' },
+            radiant:   { color: '#ffea82', label: 'Radiant' },
+        };
+
+        function rarityInfo(r) { return RARITY[r] || { color: '#aaa', label: r }; }
+
+        const TYPE_LABEL = {
+            banner: 'Bannière', title: 'Tag',
+        };
+
+        // CSS background for a cosmetic value: gradient as-is, #hex as a solid
+        // colour, anything else treated as an image path.
+        function bgCss(v) {
+            if (!v) return 'linear-gradient(135deg,#0a1020,#141d33)';
+            if (/gradient\(/.test(v)) return v;
+            if (/^#/.test(v)) return v;
+            return `url('${v}') center/cover no-repeat`;
+        }
+
+        function showMsg(text, ok) {
+            const el = document.getElementById('shopMsg');
+            el.textContent = text;
+            el.style.color = ok ? '#00ff64' : '#ff4655';
+            if (text) setTimeout(() => { if (el.textContent === text) el.textContent = ''; }, 4000);
+        }
+
+        function previewHtml(item) {
+            const v = item.data || '';
+            if (item.type === 'title') {
+                return `<div class="shop-preview" style="background:linear-gradient(135deg,#0a1020,#141d33);">
+                            <span class="shop-preview-title" style="color:${item.color};">${escapeHtml(v)}</span>
+                        </div>`;
+            }
+            // Visual values (banner/case_skin/theme): render the background.
+            if (/gradient\(|^#|^\/|\.(png|jpe?g|webp|gif)$/i.test(v)) {
+                return `<div class="shop-preview" style="background:${bgCss(v)};"></div>`;
+            }
+            // Keyword values (site_theme/card_foil): show the name as a chip.
+            return `<div class="shop-preview" style="background:linear-gradient(135deg,#0a1020,#141d33);">
+                        <span class="shop-preview-title" style="font-size:1rem;color:${rarityInfo(item.rarity).color};">${escapeHtml(item.name)}</span>
+                    </div>`;
+        }
+
+        function renderItem(item) {
+            const rar = rarityInfo(item.rarity);
+            const btn = item.owned
+                ? `<button class="shop-btn shop-btn-buy" disabled>Possédé ✓</button>`
+                : `<button class="shop-btn shop-btn-buy" onclick="buy(${item.id})">Acheter</button>`;
+
+            const priceLine = item.owned
+                ? `<span class="shop-price" style="color:#00ff64;">✓ Déjà possédé</span>`
+                : `<span class="shop-price">${item.price.toLocaleString()} FT</span>`;
+
+            return `
+                <div class="shop-card" style="border-color:${rar.color}55;">
+                    ${previewHtml(item)}
+                    <div class="shop-card-body">
+                        <div class="shop-card-name">${escapeHtml(item.name)}</div>
+                        <div class="shop-rarity" style="color:${rar.color};">${rar.label} · ${TYPE_LABEL[item.type] || item.type}</div>
+                        ${item.description ? `<div style="font-family:'Rajdhani',sans-serif;color:#8a98b8;font-size:.9rem;">${escapeHtml(item.description)}</div>` : ''}
+                        ${priceLine}
+                        ${btn}
+                    </div>
+                </div>`;
+        }
+
+        let _shopItems = [];
+        let _devMode = false;
+
+        async function loadShop() {
+            try {
+                const res = await fetch(`${getApiBase()}/api/shop`, { credentials: 'include' });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+
+                _shopItems = data.items || [];
+                _devMode = !!data.dev_mode;
+                document.getElementById('shopBalance').textContent = Math.round(data.balance).toLocaleString();
+
+                // In dev mode the whole catalog is purchasable, so expose search
+                // + type filters and relabel the section.
+                document.getElementById('shopControls').style.display = _devMode ? 'flex' : 'none';
+                if (_devMode) {
+                    document.getElementById('shopSectionTitle').textContent = '🛠️ Catalogue complet (dev)';
+                }
+                renderShop();
+            } catch (err) {
+                document.getElementById('shopGrid').innerHTML = '<p style="color:#ff4655;">Connecte-toi pour accéder à la boutique.</p>';
+            }
+        }
+
+        function renderShop() {
+            let items = _shopItems;
+            if (_devMode) {
+                const q = (document.getElementById('shopSearch').value || '').trim().toLowerCase();
+                const type = document.getElementById('shopTypeFilter').value;
+                items = items.filter(it =>
+                    (!type || it.type === type) &&
+                    (!q || (it.name || '').toLowerCase().includes(q) || (it.data || '').toLowerCase().includes(q)));
+            }
+            const empty = _devMode ? 'Aucun cosmétique ne correspond.' : 'Aucun cosmétique disponible aujourd\'hui.';
+            document.getElementById('shopGrid').innerHTML =
+                items.map(renderItem).join('') || `<p style="color:#888;">${empty}</p>`;
+        }
+
+        async function buy(itemId) {
+            try {
+                const res = await fetch(`${getApiBase()}/api/shop/buy`, {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: itemId })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    showMsg('Achat réussi ! Équipe-le depuis ton profil. 🎉', true);
+                    if (typeof window.loadUserProfile === 'function') window.loadUserProfile(true);
+                    loadShop();
+                } else {
+                    showMsg(data.error || "Échec de l'achat.", false);
+                }
+            } catch { showMsg('Erreur réseau.', false); }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadShop);
+    </script>
+</body>
+</html>

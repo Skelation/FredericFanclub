@@ -21,11 +21,13 @@ import (
 	"fredericfanclub/server/internal/premier"
 	"fredericfanclub/server/internal/quests"
 	"fredericfanclub/server/internal/radio"
+	"fredericfanclub/server/internal/shop"
 	"fredericfanclub/server/internal/user"
 )
 
 func main() {
 	matches.LoadDotEnv()
+	hub.RefreshDevMode() // re-read FRED_ENV now that .env is loaded
 	db.Init()
 	auth.Init()
 	hub.StartBroadcaster()
@@ -65,6 +67,7 @@ func main() {
 	inventory.RegisterRoutes(mux, allowed)
 	radio.RegisterRoutes(mux, allowed)
 	betting.RegisterRoutes(mux, allowed)
+	shop.RegisterRoutes(mux, allowed)
 	admin.RegisterRoutes(mux, allowed, base, apiKey)
 	matches.RegisterRoutes(mux, allowed, base, matchPath, apiKey)
 
@@ -96,7 +99,7 @@ func main() {
 		Handler:           middleware.LogRequests(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
-	log.Printf("listening on %s (VALORANT_API_BASE=%s)", srv.Addr, base)
+	log.Printf("listening on %s (VALORANT_API_BASE=%s, dev_mode=%v)", srv.Addr, base, hub.DevMode)
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}

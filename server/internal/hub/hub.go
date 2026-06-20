@@ -25,8 +25,7 @@ type WSMessage struct {
 }
 
 var (
-	DevMode = strings.EqualFold(os.Getenv("FRED_ENV"), "dev") ||
-		strings.EqualFold(os.Getenv("FRED_ENV"), "development")
+	DevMode = devModeFromEnv()
 
 	CurrentMarket *PropMarket
 	PuuidCache    sync.Map
@@ -39,6 +38,16 @@ var (
 	Mu        sync.Mutex
 	Broadcast = make(chan WSMessage)
 )
+
+func devModeFromEnv() bool {
+	return strings.EqualFold(os.Getenv("FRED_ENV"), "dev") ||
+		strings.EqualFold(os.Getenv("FRED_ENV"), "development")
+}
+
+// RefreshDevMode re-reads FRED_ENV. The package-level DevMode initializer runs
+// before main() loads the .env file, so call this after LoadDotEnv() for the
+// flag to pick up values that live only in .env.
+func RefreshDevMode() { DevMode = devModeFromEnv() }
 
 func StartBroadcaster() {
 	go func() {

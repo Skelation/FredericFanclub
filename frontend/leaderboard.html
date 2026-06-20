@@ -44,13 +44,39 @@
             padding: 12px 15px;
             margin-bottom: 8px;
             background: rgba(255, 255, 255, 0.03);
+            border: 1px solid transparent;
             border-radius: 6px;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-decoration: none;
+            cursor: pointer;
         }
 
         .board-row:hover {
             transform: translateX(5px);
             background: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 18px rgba(0,0,0,0.4);
+        }
+
+        /* Keep text legible over arbitrary banner images. */
+        .board-row .rank-number,
+        .board-row .player-name,
+        .board-row .player-title,
+        .board-row .player-score {
+            text-shadow: 0 1px 4px rgba(0,0,0,0.85);
+        }
+
+        .player-name-wrap {
+            display: flex;
+            flex-direction: column;
+            line-height: 1.1;
+        }
+        .player-title {
+            font-family: 'Orbitron', sans-serif;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-top: 2px;
         }
 
         .player-info {
@@ -259,19 +285,32 @@
                 const showcaseHtml = user.showcase_card
                     ? `<img src="${user.showcase_card.image_url}" class="showcase-thumb" title="${user.showcase_card.name} (${user.showcase_card.rarity})" alt="Showcase">`
                     : '';
+                const titleHtml = user.title
+                    ? `<span class="player-title" style="color:${user.title.color}">${user.title.text}</span>`
+                    : '';
+                // A purchased banner becomes the row's background. A horizontal
+                // dark-edge filter is layered on top so the banner stays visible
+                // in the middle while the text at both ends stays legible.
+                const bannerStyle = user.banner
+                    ? `style="background:linear-gradient(90deg,rgba(7,11,22,.94) 0%,rgba(7,11,22,.55) 32%,rgba(7,11,22,.45) 50%,rgba(7,11,22,.55) 68%,rgba(7,11,22,.94) 100%),${bannerImageCss(user.banner.data)};border-color:rgba(255,255,255,.18);"`
+                    : '';
+                const href = user.id ? `profile.html?id=${encodeURIComponent(user.id)}` : '#';
                 return `
-                    <div class="board-row ${rankClass}">
+                    <a class="board-row ${rankClass}" href="${href}" ${bannerStyle}>
                         <div class="player-info">
                             <span class="rank-number">#${rank}</span>
-                            <img src="${user.avatar}" class="player-avatar" alt="Avatar">
-                            <span class="player-name">${user.username}</span>
+                            <img src="${user.avatar}" class="player-avatar" alt="Avatar" onerror="this.onerror=null;this.src='https://cdn.discordapp.com/embed/avatars/0.png';">
+                            <div class="player-name-wrap">
+                                <span class="player-name">${user.username}</span>
+                                ${titleHtml}
+                            </div>
                             ${badgesHtml}
                         </div>
                         <div class="player-right">
                             ${showcaseHtml}
                             <span class="player-score">${scoreFormatted} ${suffix}</span>
                         </div>
-                    </div>`;
+                    </a>`;
             }).join('');
         }
 

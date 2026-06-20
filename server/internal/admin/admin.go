@@ -178,6 +178,175 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 		fmt.Fprintf(w, `{"success": true, "message": "Card added!", "card_id": %d}`, newID)
 	})
 
+	// Add cosmetic (banner / title) — e.g. register a PNG profile background
+	// as a purchasable banner. Price is derived from rarity in the shop.
+	mux.HandleFunc("OPTIONS /api/admin/cosmetics", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/admin/cosmetics", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != adminToken() {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Type        string `json:"type"`        // 'banner' | 'title'
+			Name        string `json:"name"`
+			Value       string `json:"value"`       // banner: image path (/images/banners/x.png) or CSS gradient; title: display text
+			Rarity      string `json:"rarity"`
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		req.Type = strings.ToLower(strings.TrimSpace(req.Type))
+		req.Name = strings.TrimSpace(req.Name)
+		req.Value = strings.TrimSpace(req.Value)
+		if req.Type != "banner" && req.Type != "title" {
+			http.Error(w, `{"error": "type must be 'banner' or 'title'"}`, http.StatusBadRequest)
+			return
+		}
+		if req.Name == "" || req.Value == "" {
+			http.Error(w, `{"error": "name and value are required"}`, http.StatusBadRequest)
+			return
+		}
+		if req.Rarity == "" {
+			req.Rarity = "bronze"
+		}
+		result, err := db.DB.Exec(
+			"INSERT INTO cosmetics (type, name, value, rarity, description) VALUES (?, ?, ?, ?, ?)",
+			req.Type, req.Name, req.Value, req.Rarity, req.Description)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		newID, _ := result.LastInsertId()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "cosmetic_id": %d, "price": %d}`, newID, db.CosmeticPrice(req.Rarity))
+	})
+
+	// List cosmetics (banners + titles) for management
+	mux.HandleFunc("GET /api/admin/cosmetics", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != adminToken() {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		rows, err := db.DB.Query(`SELECT id, type, name, value, COALESCE(rarity,'bronze'), COALESCE(description,'')
+			FROM cosmetics WHERE type IN ('banner', 'title') ORDER BY type, id`)
+		if err != nil {
+			http.Error(w, `{"error": "db error"}`, http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+		type Cosmetic struct {
+			ID          int    `json:"id"`
+			Type        string `json:"type"`
+			Name        string `json:"name"`
+			Value       string `json:"value"`
+			Rarity      string `json:"rarity"`
+			Description string `json:"description"`
+			Price       int    `json:"price"`
+		}
+		out := make([]Cosmetic, 0)
+		for rows.Next() {
+			var c Cosmetic
+			rows.Scan(&c.ID, &c.Type, &c.Name, &c.Value, &c.Rarity, &c.Description)
+			c.Price = db.CosmeticPrice(c.Rarity)
+			out = append(out, c)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	})
+
+	// Update a cosmetic (banner / title)
+	mux.HandleFunc("OPTIONS /api/admin/update-cosmetic", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/admin/update-cosmetic", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != adminToken() {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			ID          int    `json:"id"`
+			Name        string `json:"name"`
+			Value       string `json:"value"`
+			Rarity      string `json:"rarity"`
+			Description string `json:"description"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		req.Value = strings.TrimSpace(req.Value)
+		if req.Name == "" || req.Value == "" {
+			http.Error(w, `{"error": "name and value are required"}`, http.StatusBadRequest)
+			return
+		}
+		if req.Rarity == "" {
+			req.Rarity = "bronze"
+		}
+		res, err := db.DB.Exec(
+			"UPDATE cosmetics SET name = ?, value = ?, rarity = ?, description = ? WHERE id = ?",
+			req.Name, req.Value, req.Rarity, req.Description, req.ID)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			http.Error(w, `{"error": "cosmetic not found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "price": %d}`, db.CosmeticPrice(req.Rarity))
+	})
+
+	// Delete a cosmetic (banner / title) — also un-equips it and removes
+	// ownership rows so nobody is left pointing at a deleted item.
+	mux.HandleFunc("OPTIONS /api/admin/delete-cosmetic", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/admin/delete-cosmetic", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != adminToken() {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			ID int `json:"id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.ID == 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		tx, err := db.DB.Begin()
+		if err != nil {
+			http.Error(w, `{"error": "server error"}`, http.StatusInternalServerError)
+			return
+		}
+		tx.Exec("UPDATE user_profile SET banner_id = NULL WHERE banner_id = ?", req.ID)
+		tx.Exec("UPDATE user_profile SET title_id = NULL WHERE title_id = ?", req.ID)
+		tx.Exec("DELETE FROM user_cosmetics WHERE cosmetic_id = ?", req.ID)
+		if _, err := tx.Exec("DELETE FROM cosmetics WHERE id = ?", req.ID); err != nil {
+			tx.Rollback()
+			http.Error(w, `{"error": "db error on cosmetics"}`, http.StatusInternalServerError)
+			return
+		}
+		tx.Commit()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Cosmetic deleted and un-equipped."}`)
+	})
+
 	// Delete card
 	mux.HandleFunc("OPTIONS /api/admin/delete-card", func(w http.ResponseWriter, r *http.Request) {
 		middleware.ApplyCORS(w, r, allowed)

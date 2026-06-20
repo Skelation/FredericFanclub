@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil - FRED Fanclub</title>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <style>
+        .profile-wrap { max-width: 860px; margin: 30px auto 0; }
+
+        .profile-card {
+            background: #0d1428; border: 1px solid rgba(0,212,255,.13);
+            border-radius: 16px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5);
+        }
+
+        .profile-banner {
+            height: 180px; position: relative;
+            background: linear-gradient(135deg,#1a2a4a,#050810);
+        }
+        .profile-banner::after {
+            content: ''; position: absolute; inset: 0;
+            background: linear-gradient(to bottom, rgba(13,20,40,0) 40%, #0d1428 100%);
+        }
+
+        .profile-identity {
+            display: flex; align-items: flex-end; gap: 20px;
+            padding: 0 30px; margin-top: -55px; position: relative; z-index: 2;
+        }
+        .profile-avatar {
+            width: 110px; height: 110px; border-radius: 50%;
+            border: 4px solid #0d1428; background: #0d1428; object-fit: cover;
+            box-shadow: 0 6px 20px rgba(0,0,0,.6);
+        }
+        .profile-names { padding-bottom: 10px; }
+        .profile-username { font-family: 'Orbitron', sans-serif; font-size: 1.9rem; color: #fff; margin: 0; }
+        .profile-title {
+            font-family: 'Orbitron', sans-serif; font-size: .85rem; font-weight: 700;
+            text-transform: uppercase; letter-spacing: 2px; margin-top: 4px;
+        }
+        .profile-joined { font-family: 'Rajdhani', sans-serif; color: #6c7a99; font-size: .9rem; margin-top: 4px; }
+
+        .profile-actions { padding: 18px 30px 0; }
+        .profile-edit-btn {
+            display: inline-block; padding: 9px 20px; border-radius: 8px;
+            background: rgba(0,212,255,.12); border: 1px solid #00d4ff; color: #00d4ff;
+            font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: .8rem;
+            text-transform: uppercase; letter-spacing: 1px; text-decoration: none; transition: all .2s;
+        }
+        .profile-edit-btn:hover { background: rgba(0,212,255,.25); }
+
+        .profile-stats {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+            padding: 24px 30px;
+        }
+        .stat-box {
+            background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.06);
+            border-radius: 10px; padding: 16px; text-align: center;
+        }
+        .stat-value { font-family: 'Orbitron', sans-serif; font-size: 1.6rem; font-weight: 900; color: #00d4ff; }
+        .stat-label { font-family: 'Rajdhani', sans-serif; font-size: .85rem; color: #8a98b8; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+
+        .profile-section { padding: 0 30px 28px; }
+        .profile-section h3 {
+            font-family: 'Orbitron', sans-serif; font-size: 1.1rem; color: #fff;
+            text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 16px;
+            padding-bottom: 8px; border-bottom: 1px solid rgba(0,212,255,.15);
+        }
+
+        .badge-grid { display: flex; flex-wrap: wrap; gap: 12px; }
+        .profile-badge {
+            display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+            background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.1); border-radius: 30px;
+            font-family: 'Rajdhani', sans-serif; font-weight: 600; color: #cdd8ee; font-size: .95rem;
+        }
+        .profile-badge .b-icon { font-size: 1.1rem; }
+
+        .showcase-wrap { display: flex; gap: 20px; align-items: center; }
+        .showcase-card-img {
+            width: 130px; border-radius: 8px; border: 2px solid rgba(255,255,255,.15);
+            box-shadow: 0 6px 18px rgba(0,0,0,.5);
+        }
+        .showcase-meta-name { font-family: 'Orbitron', sans-serif; font-size: 1.2rem; color: #fff; }
+        .showcase-meta-rarity { font-family: 'Rajdhani', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; margin-top: 4px; }
+
+        .muted { color: #6c7a99; font-family: 'Rajdhani', sans-serif; }
+
+        .cos-type-label {
+            font-family: 'Orbitron', sans-serif; font-size: .8rem; color: #8a98b8;
+            text-transform: uppercase; letter-spacing: 1.5px; margin: 18px 0 10px;
+        }
+        .cos-grid {
+            display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 14px;
+        }
+        .cos-card {
+            background: rgba(0,0,0,.3); border: 1px solid rgba(255,255,255,.08);
+            border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;
+        }
+        .cos-preview {
+            height: 64px; display: flex; align-items: center; justify-content: center;
+        }
+        .cos-preview-title {
+            font-family: 'Orbitron', sans-serif; font-weight: 900; font-size: 1rem;
+            text-transform: uppercase; letter-spacing: 1.5px; text-shadow: 0 2px 10px rgba(0,0,0,.8);
+        }
+        .cos-card-body { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+        .cos-name { font-family: 'Rajdhani', sans-serif; font-weight: 600; color: #cdd8ee; font-size: .95rem; }
+        .cos-btn {
+            margin-top: auto; padding: 8px; border-radius: 7px; cursor: pointer; border: none;
+            font-family: 'Orbitron', sans-serif; font-weight: 700; font-size: .72rem;
+            text-transform: uppercase; letter-spacing: 1px; transition: all .2s;
+        }
+        .cos-btn-equip { background: transparent; border: 1px solid #00ff64; color: #00ff64; }
+        .cos-btn-equip:hover { background: rgba(0,255,100,.12); }
+        .cos-btn-equipped { background: rgba(0,255,100,.15); border: 1px solid #00ff64; color: #00ff64; }
+        .cos-btn-equipped:hover { background: rgba(255,70,85,.12); border-color: #ff4655; color: #ff4655; }
+
+        .profile-toast {
+            position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+            background: #0d1428; border: 1px solid rgba(0,212,255,.4); color: #fff;
+            padding: 12px 22px; border-radius: 30px; font-family: 'Rajdhani', sans-serif;
+            font-weight: 600; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 50;
+        }
+        .profile-toast.show { opacity: 1; }
+
+        @media (max-width: 600px) {
+            .profile-stats { grid-template-columns: 1fr; }
+            .profile-identity { flex-direction: column; align-items: center; text-align: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-waves" aria-hidden="true"></div>
+
+    <nav>
+        <div class="container">
+            <a href="index.html" class="nav-logo">
+                <img src="images/LogoTransparent.png" alt="" class="nav-logo-img" width="60" height="60">
+                <span class="nav-logo-text">FRED</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="index.html">Home</a></li>
+                <li><a href="matches.html">Matchs</a></li>
+                <li><a href="premier.html">Premier</a></li>
+                <li><a href="radio.html">Radio</a></li>
+                <li><a href="betting.html">Betting</a></li>
+                <li><a href="packs.html">Packs</a></li>
+                <li><a href="inventory.html">Inventaire</a></li>
+                <li><a href="catalog.html">Catalogue</a></li>
+                <li><a href="leaderboard.html">Classement</a></li>
+            </ul>
+            <div id="authContainer" style="margin-left: 2rem; display: flex; align-items: center;">
+                <a id="discordLoginBtn" class="login-btn" style="cursor: pointer;">Login with Discord</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container" style="padding-bottom: 100px;">
+        <div class="profile-wrap">
+            <div id="profileContent">
+                <p class="muted" style="text-align:center; margin-top:60px;">Chargement du profil…</p>
+            </div>
+        </div>
+    </main>
+
+    <div id="profileToast" class="profile-toast"></div>
+
+    <script src="js/site.js"></script>
+    <script>
+        const RARITY = {
+            iron:      '#aaaaaa', bronze:  '#cd7f32', diamond:  '#b982ff',
+            ascendant: '#2bc97e', immortal:'#ff4655', radiant:  '#ffea82',
+        };
+        function rarityColor(r) { return RARITY[r] || '#aaa'; }
+
+        const TYPE_LABEL = {
+            banner: 'Bannières', title: 'Tags',
+        };
+        const TYPE_ORDER = ['banner', 'title'];
+
+        function bgCss(v) {
+            if (!v) return 'linear-gradient(135deg,#0a1020,#141d33)';
+            if (/gradient\(/.test(v)) return v;
+            if (/^#/.test(v)) return v;
+            return `url('${v}') center/cover no-repeat`;
+        }
+
+        function toast(text, ok) {
+            const el = document.getElementById('profileToast');
+            el.textContent = text;
+            el.style.borderColor = ok ? 'rgba(0,255,100,.5)' : 'rgba(255,70,85,.5)';
+            el.classList.add('show');
+            setTimeout(() => el.classList.remove('show'), 2600);
+        }
+
+        function cosPreview(c) {
+            const v = c.data || '';
+            if (c.type === 'title') {
+                return `<div class="cos-preview" style="background:linear-gradient(135deg,#0a1020,#141d33);">
+                            <span class="cos-preview-title" style="color:${c.color};">${escapeHtml(v)}</span>
+                        </div>`;
+            }
+            if (/gradient\(|^#|^\/|\.(png|jpe?g|webp|gif)$/i.test(v)) {
+                return `<div class="cos-preview" style="background:${bgCss(v)};"></div>`;
+            }
+            return `<div class="cos-preview" style="background:linear-gradient(135deg,#0a1020,#141d33);">
+                        <span class="cos-preview-title" style="font-size:.85rem;color:${c.color};">${escapeHtml(c.name)}</span>
+                    </div>`;
+        }
+
+        function renderCosmetics(owned) {
+            if (!owned.length) {
+                return `<p class="muted">Tu ne possèdes aucun cosmétique. Rends-toi à la <a href="shop.html" style="color:#00d4ff;">boutique</a> !</p>`;
+            }
+            const byType = {};
+            owned.forEach(c => { (byType[c.type] = byType[c.type] || []).push(c); });
+            const types = TYPE_ORDER.filter(t => byType[t]).concat(Object.keys(byType).filter(t => !TYPE_ORDER.includes(t)));
+            return types.map(type => {
+                const cards = byType[type].map(c => {
+                    const btn = c.equipped
+                        ? `<button class="cos-btn cos-btn-equipped" onclick="equipCosmetic(0, '${c.type}')">Équipé ✓</button>`
+                        : `<button class="cos-btn cos-btn-equip" onclick="equipCosmetic(${c.id}, '${c.type}')">Équiper</button>`;
+                    return `<div class="cos-card" style="border-color:${rarityColor(c.rarity)}55;">
+                                ${cosPreview(c)}
+                                <div class="cos-card-body">
+                                    <div class="cos-name">${escapeHtml(c.name)}</div>
+                                    ${btn}
+                                </div>
+                            </div>`;
+                }).join('');
+                return `<div class="cos-type-label">${TYPE_LABEL[type] || type}</div><div class="cos-grid">${cards}</div>`;
+            }).join('');
+        }
+
+        async function equipCosmetic(itemId, type) {
+            try {
+                const res = await fetch(`${getApiBase()}/api/profile/equip`, {
+                    method: 'POST', credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ item_id: itemId, item_type: type })
+                });
+                const data = await res.json();
+                if (res.ok && data.success) {
+                    toast(itemId === 0 ? 'Retiré.' : 'Équipé !', true);
+                    loadProfile();
+                } else {
+                    toast(data.error || 'Échec.', false);
+                }
+            } catch { toast('Erreur réseau.', false); }
+        }
+        window.equipCosmetic = equipCosmetic;
+
+        const BADGE_META = {
+            bet_wins_5:  { icon: '🎲', title: '5 paris gagnés' },
+            bet_wins_10: { icon: '🎯', title: '10 paris gagnés' },
+            bet_wins_25: { icon: '👑', title: '25 paris gagnés' },
+        };
+
+        function badgeLabel(b) {
+            if (BADGE_META[b]) return BADGE_META[b];
+            if (b.startsWith('season_complete_')) return { icon: '🃏', title: 'Saison complétée : ' + b.replace('season_complete_', '') };
+            return { icon: '⭐', title: b };
+        }
+
+        function formatJoined(s) {
+            if (!s) return '';
+            const ms = Date.parse(s.replace(' ', 'T'));
+            if (Number.isNaN(ms)) return '';
+            return new Date(ms).toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+        }
+
+        function render(p) {
+            const bannerBg = p.banner ? bannerImageCss(p.banner.data) : 'linear-gradient(135deg,#1a2a4a,#050810)';
+            const titleHtml = p.title
+                ? `<div class="profile-title" style="color:${p.title.color}">${escapeHtml(p.title.text)}</div>`
+                : '';
+            const joined = formatJoined(p.joined_at);
+            const joinedHtml = joined ? `<div class="profile-joined">Membre depuis ${joined}</div>` : '';
+            const bioHtml = (p.bio && p.bio.trim())
+                ? `<div class="profile-section" style="padding-top:4px;"><h3>Bio</h3><p style="font-family:'Rajdhani',sans-serif;color:#cdd8ee;font-size:1.05rem;line-height:1.5;">${escapeHtml(p.bio)}</p></div>`
+                : '';
+
+            const editHtml = p.is_self
+                ? `<div class="profile-actions"><a class="profile-edit-btn" href="shop.html">🛒 Boutique</a></div>`
+                : '';
+
+            const cosmeticsHtml = p.is_self
+                ? `<div class="profile-section"><h3>Mes cosmétiques</h3>${renderCosmetics(p.owned_cosmetics || [])}</div>`
+                : '';
+
+            const badges = (p.badges || []);
+            const badgesHtml = badges.length
+                ? `<div class="badge-grid">${badges.map(b => {
+                        const m = badgeLabel(b);
+                        return `<div class="profile-badge"><span class="b-icon">${m.icon}</span>${escapeHtml(m.title)}</div>`;
+                    }).join('')}</div>`
+                : `<p class="muted">Aucun badge pour le moment.</p>`;
+
+            let showcaseHtml;
+            if (p.showcase_card) {
+                const sc = p.showcase_card;
+                showcaseHtml = `
+                    <div class="showcase-wrap">
+                        <img class="showcase-card-img" src="${sc.image_url}" alt="${escapeHtml(sc.name)}">
+                        <div>
+                            <div class="showcase-meta-name">${escapeHtml(sc.name)}</div>
+                            <div class="showcase-meta-rarity" style="color:${rarityColor(sc.rarity)}">${escapeHtml(sc.rarity)}</div>
+                        </div>
+                    </div>`;
+            } else {
+                showcaseHtml = `<p class="muted">Aucune carte vitrine sélectionnée.</p>`;
+            }
+
+            document.getElementById('profileContent').innerHTML = `
+                <div class="profile-card fade-in visible">
+                    <div class="profile-banner" style="background:${bannerBg};"></div>
+                    <div class="profile-identity">
+                        <img class="profile-avatar" src="${p.avatar_url}" alt="${escapeHtml(p.username)}">
+                        <div class="profile-names">
+                            <h1 class="profile-username">${escapeHtml(p.username)}</h1>
+                            ${titleHtml}
+                            ${joinedHtml}
+                        </div>
+                    </div>
+                    ${editHtml}
+                    ${bioHtml}
+                    <div class="profile-stats">
+                        <div class="stat-box"><div class="stat-value" style="color:#00ff64;">${Math.round(p.fredtokens).toLocaleString()}</div><div class="stat-label">Freddy Tokens</div></div>
+                        <div class="stat-box"><div class="stat-value">${p.distinct_cards}</div><div class="stat-label">Cartes uniques</div></div>
+                        <div class="stat-box"><div class="stat-value">${p.total_cards}</div><div class="stat-label">Cartes totales</div></div>
+                    </div>
+                    <div class="profile-section">
+                        <h3>Carte vitrine</h3>
+                        ${showcaseHtml}
+                    </div>
+                    <div class="profile-section">
+                        <h3>Badges</h3>
+                        ${badgesHtml}
+                    </div>
+                    ${cosmeticsHtml}
+                </div>`;
+        }
+
+        async function loadProfile() {
+            const params = new URLSearchParams(window.location.search);
+            const id = (params.get('id') || '').trim();
+            const url = id
+                ? `${getApiBase()}/api/profile?id=${encodeURIComponent(id)}`
+                : `${getApiBase()}/api/profile`;
+            try {
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) throw new Error();
+                const data = await res.json();
+                document.title = `${data.username} - FRED Fanclub`;
+                render(data);
+            } catch (err) {
+                document.getElementById('profileContent').innerHTML =
+                    `<p class="muted" style="text-align:center; margin-top:60px;">Profil introuvable ou tu n'es pas connecté.</p>`;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', loadProfile);
+    </script>
+</body>
+</html>

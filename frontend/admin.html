@@ -2,16 +2,97 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Fred Admin Panel</title>
     <style>
-        body { background: #111; color: white; font-family: sans-serif; padding: 50px; }
-        .admin-box { background: #222; padding: 30px; border-radius: 8px; max-width: 400px; }
-        input, select, button { width: 100%; margin-bottom: 15px; padding: 10px; box-sizing: border-box; }
-        button { background: #00d4ff; color: #000; font-weight: bold; cursor: pointer; border: none; }
+        :root {
+            --cyan: #00d4ff;
+            --green: #2bc97e;
+            --red: #ff4655;
+            --gold: #ffb01f;
+            --purple: #b489ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            background: #0d0f14;
+            color: white;
+            font-family: sans-serif;
+            margin: 0;
+            padding: 0 0 60px;
+        }
 
+        /* Sticky token header — applies to every panel */
+        .admin-header {
+            position: sticky;
+            top: 0;
+            z-index: 200;
+            background: #15181f;
+            border-bottom: 1px solid #2a2e38;
+            padding: 16px 28px;
+            display: flex;
+            align-items: center;
+            gap: 18px;
+            flex-wrap: wrap;
+        }
+        .admin-header h1 { font-size: 1.2rem; margin: 0; white-space: nowrap; }
+        .admin-header .token-wrap { flex: 1; min-width: 240px; max-width: 480px; }
+        .admin-header label { font-size: 0.75rem; color: #888; display: block; margin-bottom: 4px; }
+
+        .admin-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+            align-items: start;
+            padding: 24px 28px;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        .panel {
+            background: #1a1d25;
+            border: 1px solid #2a2e38;
+            padding: 22px 22px 18px;
+            border-radius: 10px;
+        }
+        .panel h2 {
+            margin: 0 0 14px;
+            font-size: 1.05rem;
+            border-bottom: 1px solid #2a2e38;
+            padding-bottom: 10px;
+        }
+        .panel .hint { color: #8b90a0; font-size: 0.82rem; margin: 0 0 14px; line-height: 1.4; }
+
+        label { font-size: 0.78rem; color: #aab; display: block; margin-bottom: 5px; }
+        input, select, textarea {
+            width: 100%;
+            margin-bottom: 13px;
+            padding: 9px 10px;
+            box-sizing: border-box;
+            background: #0f1116;
+            color: #fff;
+            border: 1px solid #333a47;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--cyan); }
+        button {
+            width: 100%;
+            padding: 10px;
+            background: var(--cyan);
+            color: #000;
+            font-weight: bold;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.9rem;
+        }
+        button:hover { filter: brightness(1.1); }
+        .status { font-size: 0.85rem; min-height: 1.2em; margin: 8px 0 0; }
+        .btn-row { display: flex; gap: 8px; }
+        .btn-row button { width: auto; flex: 1; }
 
         /* User search dropdown */
-        .search-wrap { position: relative; margin-bottom: 15px; }
+        .search-wrap { position: relative; margin-bottom: 13px; }
         .search-wrap input { margin-bottom: 0; }
         #userDropdown {
             display: none;
@@ -37,6 +118,44 @@
         .user-opt:last-child { border-bottom: none; }
         .user-opt:hover { background: #3a3a3a; }
         .user-opt .uid { color: #888; font-size: 0.78rem; font-family: monospace; }
+
+        /* Manage cosmetics / cards rows */
+        .filter-row { display: flex; gap: 8px; margin: 12px 0 4px; }
+        .filter-row input { flex: 1; margin-bottom: 0; }
+        .filter-row select { width: auto; margin-bottom: 0; }
+        .manage-list { margin-top: 6px; max-height: 460px; overflow-y: auto; }
+        .cos-row {
+            background: #0f1116;
+            border: 1px solid #2a2e38;
+            border-left: 4px solid #555;
+            border-radius: 6px;
+            padding: 12px;
+            margin-bottom: 10px;
+        }
+        .cos-row .cos-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .cos-row .cos-id { color: #777; font-family: monospace; font-size: 0.75rem; }
+        .cos-row .cos-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .cos-row input, .cos-row select { margin-bottom: 0; font-size: 0.82rem; padding: 7px 8px; }
+        .cos-row .full { grid-column: 1 / -1; }
+        .cos-row .cos-actions { display: flex; gap: 8px; margin-top: 8px; }
+        .cos-row .cos-actions button { width: auto; flex: 1; padding: 7px; font-size: 0.82rem; }
+        .btn-del { background: var(--red); color: #fff; }
+        .btn-save { background: var(--green); color: #000; }
+        .swatch { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px; padding: 2px 8px; border-radius: 4px; color: #000; font-weight: bold; }
+        .type-pill { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .5px; color: #8b90a0; }
+
+        .span-2 { grid-column: span 2; }
+        @media (max-width: 760px) { .span-2 { grid-column: span 1; } }
     </style>
 </head>
 <body>
@@ -54,125 +173,185 @@
     </datalist>
     <datalist id="ingameSuggestions"></datalist>
 
-    <div class="admin-box">
-        <h2>Add Trading Card</h2>
+    <div class="admin-header">
+        <h1>🛠️ Fred Admin</h1>
+        <div class="token-wrap">
+            <label for="adminToken">Admin Password (FRED_ADMIN_TOKEN)</label>
+            <input type="password" id="adminToken" placeholder="Enter token to unlock all actions" onblur="onTokenEntered()" style="margin-bottom:0;">
+        </div>
+    </div>
 
-        <label>Admin Password:</label>
-        <input type="password" id="adminToken" placeholder="Enter FRED_ADMIN_TOKEN" onblur="onTokenEntered()">
+    <div class="admin-grid">
 
-        <label>Card Name:</label>
-        <input type="text" id="cardName" placeholder="e.g. Graussbyt Base">
-
-        <label>Rarity:</label>
-        <select id="cardRarity">
-            <option value="iron">Iron</option>
-            <option value="bronze">Bronze</option>
-            <option value="diamond">Diamond</option>
-            <option value="ascendant">Ascendant</option>
-            <option value="immortal">Immortal</option>
-            <option value="radiant">Radiant</option>
-        </select>
-
-        <label>Season:</label>
-        <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
-        <label>Image URL:</label>
-        <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
-
-        <button onclick="addCard()">Add to Database</button>
-        <p id="statusMsg"></p>
-        <hr style="border-color: #444; margin: 30px 0;">
-
-        <h2>Central Bank (Mint Tokens)</h2>
-
-        <label>Search User:</label>
-        <div class="search-wrap">
-            <input type="text" id="userSearch" placeholder="Type a username..." oninput="filterUsers(this.value)" onfocus="filterUsers(this.value)" autocomplete="off">
-            <div id="userDropdown"></div>
+        <!-- ── Add Trading Card ─────────────────────────────────────── -->
+        <div class="panel">
+            <h2>Add Trading Card</h2>
+            <label>Card Name:</label>
+            <input type="text" id="cardName" placeholder="e.g. Graussbyt Base">
+            <label>Rarity:</label>
+            <select id="cardRarity">
+                <option value="iron">Iron</option>
+                <option value="bronze">Bronze</option>
+                <option value="diamond">Diamond</option>
+                <option value="ascendant">Ascendant</option>
+                <option value="immortal">Immortal</option>
+                <option value="radiant">Radiant</option>
+            </select>
+            <label>Season:</label>
+            <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
+            <label>Image URL:</label>
+            <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
+            <button onclick="addCard()">Add to Database</button>
+            <p class="status" id="statusMsg"></p>
         </div>
 
-        <label>User Discord ID:</label>
-        <input type="text" id="targetDiscordId" placeholder="e.g. 123456789012345678">
-
-        <label>Amount to Give (Can be negative to remove!):</label>
-        <input type="number" id="tokenAmount" placeholder="5000">
-
-        <button onclick="giveTokens()" style="background: #2bc97e;">Grant Fredtokens</button>
-        <p id="tokenStatusMsg"></p>
-        <hr style="border-color: #444; margin: 30px 0;">
-
-        <h2>Manage Cards (Delete)</h2>
-        <button onclick="fetchAdminCards()" style="background: #b489ff;">Load Card Catalog</button>
-
-        <div id="adminCardList" style="margin-top: 15px; max-height: 300px; overflow-y: auto;"></div>
-
-        <p id="deleteStatusMsg"></p>
-        <hr style="border-color: #444; margin: 30px 0;">
-
-        <h2>Schedule Upcoming Match</h2>
-
-        <label>Opponent Name:</label>
-        <input type="text" id="matchOpponent" placeholder="e.g. NOVA">
-
-        <label>Opponent Tag:</label>
-        <input type="text" id="matchTag" placeholder="e.g. #NV">
-
-        <label>Date & Time:</label>
-        <input type="datetime-local" id="matchTime">
-
-        <label>Format:</label>
-        <select id="matchFormat">
-            <option value="BO1 — Premier">BO1 — Premier</option>
-            <option value="BO3 — Premier">BO3 — Premier</option>
-            <option value="Playoffs">Playoffs</option>
-        </select>
-
-        <label>Map(s):</label>
-        <input type="text" id="matchMaps" placeholder="e.g. Ascent or Ascent, Haven, Split">
-
-        <button onclick="scheduleMatch()" style="background: #ffb01f;">Schedule Match</button>
-        <p id="matchStatusMsg"></p>
-
-        <hr style="border-color: #444; margin: 30px 0;">
-
-        <h2>Active Pack Season</h2>
-        <p id="currentSeasonDisplay" style="color: #00d4ff; font-weight: bold; margin-bottom: 15px;">Loading...</p>
-
-        <label>New Season Name:</label>
-        <input type="text" id="newSeasonName" placeholder="e.g. Season 2">
-
-        <button onclick="setPackSeason()" style="background: #ff4655;">Set Active Season</button>
-        <p id="seasonStatusMsg"></p>
-
-        <hr style="border-color: #444; margin: 30px 0;">
-
-        <h2>Premier — Player Aliases</h2>
-        <p style="color:#aaa;font-size:0.9rem;">Map any in-game name to a canonical team player. Applied to every match.</p>
-
-        <label>In-Game Name (e.g. Cailloux#BOT):</label>
-        <input type="text" id="aliasIngame" placeholder="Name#Tag" list="ingameSuggestions">
-
-        <label>Canonical Player Name:</label>
-        <input type="text" id="aliasPlayer" placeholder="e.g. Riboox" list="rosterSuggestions">
-
-        <div style="display:flex;gap:8px;">
-            <button onclick="addAlias()" style="background:#00d4ff;">Add / Update Alias</button>
-            <button onclick="loadAliasesList()" style="background:#555;">Load Current</button>
+        <!-- ── Add Profile Banner ───────────────────────────────────── -->
+        <div class="panel">
+            <h2>Add Profile Banner</h2>
+            <p class="hint">Drop the PNG in <code>frontend/images/banners/</code>, then register it here. It becomes purchasable in the shop and shows on the leaderboard. Price is set by rarity.</p>
+            <label>Banner Name:</label>
+            <input type="text" id="bannerName" placeholder="e.g. Neon City">
+            <label>Image Path (or CSS gradient):</label>
+            <input type="text" id="bannerImage" placeholder="/images/banners/neon-city.png">
+            <label>Rarity (sets price):</label>
+            <select id="bannerRarity">
+                <option value="iron">Iron — 500 FT</option>
+                <option value="bronze">Bronze — 1,000 FT</option>
+                <option value="diamond">Diamond — 2,500 FT</option>
+                <option value="ascendant">Ascendant — 5,000 FT</option>
+                <option value="immortal">Immortal — 8,000 FT</option>
+                <option value="radiant">Radiant — 12,000 FT</option>
+            </select>
+            <label>Description (optional):</label>
+            <input type="text" id="bannerDesc" placeholder="Short flavour text">
+            <button onclick="addBanner()">Add Banner to Shop</button>
+            <p class="status" id="bannerStatusMsg"></p>
         </div>
-        <p id="aliasStatusMsg"></p>
-        <div id="aliasList" style="margin-top:10px;"></div>
 
-        <hr style="border-color: #444; margin: 30px 0;">
+        <!-- ── Add Tag ──────────────────────────────────────────────── -->
+        <div class="panel">
+            <h2>Add Tag</h2>
+            <p class="hint">A tag is a coloured label shown next to a player's name on their profile and the leaderboard. Its colour comes from the rarity. Price is set by rarity.</p>
+            <label>Tag Text:</label>
+            <input type="text" id="tagText" placeholder="e.g. OG, Bêta, Top Better">
+            <label>Rarity (sets colour &amp; price):</label>
+            <select id="tagRarity">
+                <option value="iron">Iron — 500 FT</option>
+                <option value="bronze">Bronze — 1,000 FT</option>
+                <option value="diamond">Diamond — 2,500 FT</option>
+                <option value="ascendant">Ascendant — 5,000 FT</option>
+                <option value="immortal">Immortal — 8,000 FT</option>
+                <option value="radiant">Radiant — 12,000 FT</option>
+            </select>
+            <label>Description (optional):</label>
+            <input type="text" id="tagDesc" placeholder="Short flavour text">
+            <button onclick="addTag()">Add Tag to Shop</button>
+            <p class="status" id="tagStatusMsg"></p>
+        </div>
 
-        <h2>Premier — Match Reassignment</h2>
-        <p style="color:#aaa;font-size:0.9rem;">Attribute one player's performance in a specific match to a different team player.</p>
+        <!-- ── Manage Banners & Tags (Edit / Delete) ────────────────── -->
+        <div class="panel span-2">
+            <h2>Manage Banners &amp; Tags</h2>
+            <p class="hint">Edit a cosmetic's name, value, rarity (price) or description, or delete it entirely. Deleting un-equips it from everyone and removes ownership.</p>
+            <button onclick="loadCosmetics()" style="background:var(--purple);">Load Banners &amp; Tags</button>
+            <div class="filter-row" id="cosmeticFilters" style="display:none;">
+                <input type="text" id="cosmeticSearch" placeholder="Search name / value…" oninput="renderCosmetics()">
+                <select id="cosmeticTypeFilter" onchange="renderCosmetics()">
+                    <option value="">All types</option>
+                    <option value="banner">Banners</option>
+                    <option value="title">Tags</option>
+                </select>
+            </div>
+            <p class="status" id="cosmeticStatusMsg"></p>
+            <div id="cosmeticList" class="manage-list"></div>
+        </div>
 
-        <button onclick="loadPremierMatches()" style="background:#b489ff;">Load Matches</button>
-        <select id="matchSelector" style="margin-top:8px;" onchange="onMatchSelected()">
-            <option value="">Select a match...</option>
-        </select>
+        <!-- ── Central Bank ─────────────────────────────────────────── -->
+        <div class="panel">
+            <h2>Central Bank (Mint Tokens)</h2>
+            <label>Search User:</label>
+            <div class="search-wrap">
+                <input type="text" id="userSearch" placeholder="Type a username..." oninput="filterUsers(this.value)" onfocus="filterUsers(this.value)" autocomplete="off">
+                <div id="userDropdown"></div>
+            </div>
+            <label>User Discord ID:</label>
+            <input type="text" id="targetDiscordId" placeholder="e.g. 123456789012345678">
+            <label>Amount to Give (Can be negative to remove!):</label>
+            <input type="number" id="tokenAmount" placeholder="5000">
+            <button onclick="giveTokens()" style="background: var(--green);">Grant Fredtokens</button>
+            <p class="status" id="tokenStatusMsg"></p>
+        </div>
 
-        <div id="matchReassignPanel" style="margin-top:14px;"></div>
-        <p id="reassignStatusMsg"></p>
+        <!-- ── Manage Cards (Delete) ────────────────────────────────── -->
+        <div class="panel">
+            <h2>Manage Cards (Delete)</h2>
+            <button onclick="fetchAdminCards()" style="background: var(--purple);">Load Card Catalog</button>
+            <div class="filter-row" id="cardFilters" style="display:none;">
+                <input type="text" id="cardSearch" placeholder="Search name / rarity / #id…" oninput="renderAdminCards()">
+            </div>
+            <div id="adminCardList" class="manage-list" style="margin-top: 15px;"></div>
+            <p class="status" id="deleteStatusMsg"></p>
+        </div>
+
+        <!-- ── Schedule Upcoming Match ──────────────────────────────── -->
+        <div class="panel">
+            <h2>Schedule Upcoming Match</h2>
+            <label>Opponent Name:</label>
+            <input type="text" id="matchOpponent" placeholder="e.g. NOVA">
+            <label>Opponent Tag:</label>
+            <input type="text" id="matchTag" placeholder="e.g. #NV">
+            <label>Date & Time:</label>
+            <input type="datetime-local" id="matchTime">
+            <label>Format:</label>
+            <select id="matchFormat">
+                <option value="BO1 — Premier">BO1 — Premier</option>
+                <option value="BO3 — Premier">BO3 — Premier</option>
+                <option value="Playoffs">Playoffs</option>
+            </select>
+            <label>Map(s):</label>
+            <input type="text" id="matchMaps" placeholder="e.g. Ascent or Ascent, Haven, Split">
+            <button onclick="scheduleMatch()" style="background: var(--gold);">Schedule Match</button>
+            <p class="status" id="matchStatusMsg"></p>
+        </div>
+
+        <!-- ── Active Pack Season ───────────────────────────────────── -->
+        <div class="panel">
+            <h2>Active Pack Season</h2>
+            <p id="currentSeasonDisplay" style="color: var(--cyan); font-weight: bold; margin-bottom: 15px;">Loading...</p>
+            <label>New Season Name:</label>
+            <input type="text" id="newSeasonName" placeholder="e.g. Season 2">
+            <button onclick="setPackSeason()" style="background: var(--red);">Set Active Season</button>
+            <p class="status" id="seasonStatusMsg"></p>
+        </div>
+
+        <!-- ── Premier — Player Aliases ─────────────────────────────── -->
+        <div class="panel">
+            <h2>Premier — Player Aliases</h2>
+            <p class="hint">Map any in-game name to a canonical team player. Applied to every match.</p>
+            <label>In-Game Name (e.g. Cailloux#BOT):</label>
+            <input type="text" id="aliasIngame" placeholder="Name#Tag" list="ingameSuggestions">
+            <label>Canonical Player Name:</label>
+            <input type="text" id="aliasPlayer" placeholder="e.g. Riboox" list="rosterSuggestions">
+            <div class="btn-row">
+                <button onclick="addAlias()">Add / Update Alias</button>
+                <button onclick="loadAliasesList()" style="background:#555;color:#fff;">Load Current</button>
+            </div>
+            <p class="status" id="aliasStatusMsg"></p>
+            <div id="aliasList" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- ── Premier — Match Reassignment ─────────────────────────── -->
+        <div class="panel span-2">
+            <h2>Premier — Match Reassignment</h2>
+            <p class="hint">Attribute one player's performance in a specific match to a different team player.</p>
+            <button onclick="loadPremierMatches()" style="background:var(--purple);">Load Matches</button>
+            <select id="matchSelector" style="margin-top:8px;" onchange="onMatchSelected()">
+                <option value="">Select a match...</option>
+            </select>
+            <div id="matchReassignPanel" style="margin-top:14px;"></div>
+            <p class="status" id="reassignStatusMsg"></p>
+        </div>
+
     </div>
 
     <script>
@@ -183,28 +362,33 @@
             return "https://api.fredericfan.club";
         }
 
+        function adminToken() { return document.getElementById('adminToken').value; }
+
+        const RARITY_PRICE = { iron: 500, bronze: 1000, diamond: 2500, ascendant: 5000, immortal: 8000, radiant: 12000 };
+        const RARITY_COLOR = { iron: '#aaaaaa', bronze: '#cd7f32', diamond: '#b982ff', ascendant: '#2bc97e', immortal: '#ff4655', radiant: '#ffea82' };
+        function rarityOptions(selected) {
+            return Object.keys(RARITY_PRICE).map(r =>
+                `<option value="${r}" ${r === selected ? 'selected' : ''}>${r[0].toUpperCase() + r.slice(1)} — ${RARITY_PRICE[r].toLocaleString()} FT</option>`
+            ).join('');
+        }
+        const escAttr = s => (s || '').replace(/"/g, '&quot;');
+
         // ── Card ─────────────────────────────────────────────────────────────
         async function addCard() {
-            const btn = document.querySelector('button');
             const msg = document.getElementById('statusMsg');
-            btn.innerText = "Loading...";
             msg.innerText = "";
-
             try {
-                const token = document.getElementById('adminToken').value;
                 const data = {
                     name: document.getElementById('cardName').value,
                     rarity: document.getElementById('cardRarity').value,
                     image_url: document.getElementById('cardImage').value,
                     season: document.getElementById('cardSeason').value
                 };
-
                 const response = await fetch(`${getApiBase()}/api/admin/cards`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                     body: JSON.stringify(data)
                 });
-
                 const contentType = response.headers.get("content-type");
                 let result;
                 if (contentType && contentType.indexOf("application/json") !== -1) {
@@ -213,7 +397,6 @@
                     const textError = await response.text();
                     throw new Error(`Server returned non-JSON: ${textError}`);
                 }
-
                 if (response.ok) {
                     msg.style.color = "lime";
                     msg.innerText = "Success! Card ID: " + result.card_id;
@@ -225,19 +408,188 @@
             } catch (error) {
                 msg.style.color = "red";
                 msg.innerText = "Fetch Error: " + error.message;
-            } finally {
-                btn.innerText = "Add to Database";
             }
+        }
+
+        // ── Profile Banner ───────────────────────────────────────────────────
+        async function addBanner() {
+            const msg = document.getElementById('bannerStatusMsg');
+            msg.style.color = "#ccc";
+            msg.innerText = "Adding...";
+            try {
+                const data = {
+                    type: 'banner',
+                    name: document.getElementById('bannerName').value,
+                    value: document.getElementById('bannerImage').value,
+                    rarity: document.getElementById('bannerRarity').value,
+                    description: document.getElementById('bannerDesc').value
+                };
+                const response = await fetch(`${getApiBase()}/api/admin/cosmetics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msg.style.color = "lime";
+                    msg.innerText = `Banner added (ID ${result.cosmetic_id}, ${result.price} FT). Live in the shop now.`;
+                    document.getElementById('bannerName').value = '';
+                    document.getElementById('bannerImage').value = '';
+                    document.getElementById('bannerDesc').value = '';
+                } else {
+                    msg.style.color = "red";
+                    msg.innerText = "Error: " + (result.error || "Unknown server error");
+                }
+            } catch (error) {
+                msg.style.color = "red";
+                msg.innerText = "Fetch Error: " + error.message;
+            }
+        }
+
+        // ── Tag ──────────────────────────────────────────────────────────────
+        async function addTag() {
+            const msg = document.getElementById('tagStatusMsg');
+            msg.style.color = "#ccc";
+            msg.innerText = "Adding...";
+            try {
+                const text = document.getElementById('tagText').value.trim();
+                const data = {
+                    type: 'title',
+                    name: text,
+                    value: text,
+                    rarity: document.getElementById('tagRarity').value,
+                    description: document.getElementById('tagDesc').value
+                };
+                const response = await fetch(`${getApiBase()}/api/admin/cosmetics`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
+                    body: JSON.stringify(data)
+                });
+                const result = await response.json();
+                if (response.ok) {
+                    msg.style.color = "lime";
+                    msg.innerText = `Tag added (ID ${result.cosmetic_id}, ${result.price} FT). Live in the shop now.`;
+                    document.getElementById('tagText').value = '';
+                    document.getElementById('tagDesc').value = '';
+                } else {
+                    msg.style.color = "red";
+                    msg.innerText = "Error: " + (result.error || "Unknown server error");
+                }
+            } catch (error) {
+                msg.style.color = "red";
+                msg.innerText = "Fetch Error: " + error.message;
+            }
+        }
+
+        // ── Manage Banners & Tags ─────────────────────────────────────────────
+        let _cosmetics = [];
+
+        async function loadCosmetics() {
+            const msg = document.getElementById('cosmeticStatusMsg');
+            msg.innerText = '';
+            const res = await fetch(`${getApiBase()}/api/admin/cosmetics`, {
+                headers: { 'X-Admin-Token': adminToken() }
+            });
+            if (!res.ok) {
+                msg.style.color = 'red';
+                msg.innerText = 'Failed to load (check token).';
+                return;
+            }
+            _cosmetics = await res.json() || [];
+            document.getElementById('cosmeticFilters').style.display = _cosmetics.length ? 'flex' : 'none';
+            renderCosmetics();
+        }
+
+        function renderCosmetics() {
+            const list = document.getElementById('cosmeticList');
+            if (!_cosmetics.length) {
+                list.innerHTML = "<p style='color:#888;'>No banners or tags yet.</p>";
+                return;
+            }
+            const q = (document.getElementById('cosmeticSearch').value || '').trim().toLowerCase();
+            const type = document.getElementById('cosmeticTypeFilter').value;
+            const items = _cosmetics.filter(c =>
+                (!type || c.type === type) &&
+                (!q || (c.name || '').toLowerCase().includes(q) || (c.value || '').toLowerCase().includes(q)));
+            list.innerHTML = items.length
+                ? items.map(renderCosmeticRow).join('')
+                : "<p style='color:#888;'>No matches.</p>";
+        }
+
+        function renderCosmeticRow(c) {
+            const color = RARITY_COLOR[c.rarity] || '#888';
+            const isTitle = c.type === 'title';
+            return `
+            <div class="cos-row" id="cos_${c.id}" style="border-left-color:${color};">
+                <div class="cos-head">
+                    <span class="type-pill">${isTitle ? 'TAG' : 'BANNER'} <span class="cos-id">#${c.id}</span></span>
+                    <span class="swatch" style="background:${color};">${c.rarity} · ${c.price.toLocaleString()} FT</span>
+                </div>
+                <div class="cos-grid">
+                    <input type="text" id="cn_${c.id}" value="${escAttr(c.name)}" placeholder="Name">
+                    <select id="cr_${c.id}" onchange="onCosRarityChange(${c.id})">${rarityOptions(c.rarity)}</select>
+                    <input class="full" type="text" id="cv_${c.id}" value="${escAttr(c.value)}" placeholder="${isTitle ? 'Tag text' : 'Image path / gradient'}">
+                    <input class="full" type="text" id="cd_${c.id}" value="${escAttr(c.description)}" placeholder="Description (optional)">
+                </div>
+                <div class="cos-actions">
+                    <button class="btn-save" onclick="saveCosmetic(${c.id}, ${isTitle})">Save</button>
+                    <button class="btn-del" onclick="deleteCosmetic(${c.id})">Delete</button>
+                </div>
+            </div>`;
+        }
+
+        function onCosRarityChange(id) {
+            const rarity = document.getElementById('cr_' + id).value;
+            const color = RARITY_COLOR[rarity] || '#888';
+            const row = document.getElementById('cos_' + id);
+            if (row) row.style.borderLeftColor = color;
+            const swatch = row.querySelector('.swatch');
+            if (swatch) {
+                swatch.style.background = color;
+                swatch.innerText = `${rarity} · ${(RARITY_PRICE[rarity] || 0).toLocaleString()} FT`;
+            }
+        }
+
+        async function saveCosmetic(id, isTitle) {
+            const msg = document.getElementById('cosmeticStatusMsg');
+            const name = document.getElementById('cn_' + id).value.trim();
+            let value = document.getElementById('cv_' + id).value.trim();
+            const rarity = document.getElementById('cr_' + id).value;
+            const description = document.getElementById('cd_' + id).value;
+            // For tags, the display text doubles as both name and value.
+            if (isTitle && !value) value = name;
+            const res = await fetch(`${getApiBase()}/api/admin/update-cosmetic`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
+                body: JSON.stringify({ id, name, value, rarity, description })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? `Saved #${id} (${result.price} FT).` : ('Error: ' + result.error);
+            if (res.ok) loadCosmetics();
+        }
+
+        async function deleteCosmetic(id) {
+            if (!confirm(`Delete cosmetic #${id}?\nThis un-equips it from every player and removes it from their inventory permanently.`)) return;
+            const msg = document.getElementById('cosmeticStatusMsg');
+            const res = await fetch(`${getApiBase()}/api/admin/delete-cosmetic`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
+                body: JSON.stringify({ id })
+            });
+            const result = await res.json();
+            msg.style.color = res.ok ? 'lime' : 'red';
+            msg.innerText = res.ok ? result.message : ('Error: ' + result.error);
+            if (res.ok) loadCosmetics();
         }
 
         // ── Mint Tokens — user search dropdown ───────────────────────────────
         let _usersCache = [];
 
         async function loadUsersForMint() {
-            const token = document.getElementById('adminToken').value;
-            if (!token) return;
+            if (!adminToken()) return;
             const res = await fetch(`${getApiBase()}/api/admin/users`, {
-                headers: { 'X-Admin-Token': token }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             if (res.ok) _usersCache = (await res.json()) || [];
         }
@@ -279,21 +631,17 @@
         });
 
         async function giveTokens() {
-            const token = document.getElementById('adminToken').value;
             const data = {
                 discord_id: document.getElementById('targetDiscordId').value,
                 amount: parseInt(document.getElementById('tokenAmount').value)
             };
-
             const response = await fetch(`${getApiBase()}/api/admin/tokens`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify(data)
             });
-
             const result = await response.json();
             const msg = document.getElementById('tokenStatusMsg');
-
             if (response.ok) {
                 msg.style.color = "lime";
                 msg.innerText = result.message;
@@ -307,36 +655,47 @@
         }
 
         // ── Cards catalog ─────────────────────────────────────────────────────
+        let _adminCards = [];
+
         async function fetchAdminCards() {
             const res = await fetch(`${getApiBase()}/api/catalog`);
+            if (!res.ok) return;
+            _adminCards = await res.json() || [];
+            document.getElementById('cardFilters').style.display = _adminCards.length ? 'flex' : 'none';
+            renderAdminCards();
+        }
+
+        function renderAdminCards() {
             const list = document.getElementById('adminCardList');
-            if (res.ok) {
-                const cards = await res.json();
-                if (!cards || cards.length === 0) {
-                    list.innerHTML = "<p style='color: #888;'>No cards found.</p>";
-                    return;
-                }
-                list.innerHTML = cards.map(c => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; background: #333; padding: 10px; margin-bottom: 5px; border-radius: 4px;">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <img src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
-                            <div>
-                                <strong style="color: white;">[#${c.id}] ${c.name}</strong><br>
-                                <span style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">${c.rarity}</span>
-                            </div>
-                        </div>
-                        <button onclick="deleteCard(${c.id})" style="background: #ff4655; color: white; padding: 5px 10px; width: auto; margin: 0; font-size: 0.9rem;">Delete</button>
-                    </div>`).join('');
+            if (!_adminCards.length) {
+                list.innerHTML = "<p style='color: #888;'>No cards found.</p>";
+                return;
             }
+            const q = (document.getElementById('cardSearch').value || '').trim().toLowerCase();
+            const cards = _adminCards.filter(c =>
+                !q ||
+                (c.name || '').toLowerCase().includes(q) ||
+                (c.rarity || '').toLowerCase().includes(q) ||
+                String(c.id).includes(q.replace('#', '')));
+            list.innerHTML = cards.length ? cards.map(c => `
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #0f1116; border:1px solid #2a2e38; padding: 10px; margin-bottom: 8px; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <img src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
+                        <div>
+                            <strong style="color: white;">[#${c.id}] ${c.name}</strong><br>
+                            <span style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">${c.rarity}</span>
+                        </div>
+                    </div>
+                    <button onclick="deleteCard(${c.id})" class="btn-del" style="width: auto; padding: 5px 10px; font-size: 0.9rem;">Delete</button>
+                </div>`).join('') : "<p style='color: #888;'>No matches.</p>";
         }
 
         async function deleteCard(cardId) {
             if (!confirm(`Are you SURE you want to delete Card #${cardId}?\nThis will destroy it and remove it from every player's inventory permanently.`)) return;
-            const token = document.getElementById('adminToken').value;
             const msg = document.getElementById('deleteStatusMsg');
             const res = await fetch(`${getApiBase()}/api/admin/delete-card`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ card_id: cardId })
             });
             const result = await res.json();
@@ -353,7 +712,6 @@
         // ── Schedule match ────────────────────────────────────────────────────
         async function scheduleMatch() {
             const msg = document.getElementById('matchStatusMsg');
-            const token = document.getElementById('adminToken').value;
             const data = {
                 opponent: document.getElementById('matchOpponent').value,
                 tag: document.getElementById('matchTag').value,
@@ -364,7 +722,7 @@
             try {
                 const response = await fetch(`${getApiBase()}/api/admin/schedule-match`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                     body: JSON.stringify(data)
                 });
                 const result = await response.json();
@@ -383,13 +741,12 @@
 
         // ── Pack season ───────────────────────────────────────────────────────
         async function setPackSeason() {
-            const token = document.getElementById('adminToken').value;
             const season = document.getElementById('newSeasonName').value.trim();
             const msg = document.getElementById('seasonStatusMsg');
             if (!season) { msg.style.color = 'red'; msg.innerText = 'Season name cannot be empty.'; return; }
             const res = await fetch(`${getApiBase()}/api/admin/set-pack-season`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': token },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ season })
             });
             const result = await res.json();
@@ -414,10 +771,9 @@
 
         // ── Premier — in-game suggestions (from archive) ──────────────────────
         async function loadIngameSuggestions() {
-            const token = document.getElementById('adminToken').value;
-            if (!token) return;
+            if (!adminToken()) return;
             const res = await fetch(`${getApiBase()}/api/admin/premier/matches`, {
-                headers: { 'X-Admin-Token': token }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             if (!res.ok) return;
             const matches = await res.json() || [];
@@ -435,7 +791,7 @@
             if (!ingame || !player) { msg.style.color='red'; msg.innerText='Both fields are required.'; return; }
             const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ ingame, player })
             });
             const result = await res.json();
@@ -452,7 +808,7 @@
             const msg = document.getElementById('aliasStatusMsg');
             const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ ingame })
             });
             const result = await res.json();
@@ -464,7 +820,7 @@
         async function loadAliasesList() {
             const container = document.getElementById('aliasList');
             const res = await fetch(`${getApiBase()}/api/admin/premier/aliases`, {
-                headers: { 'X-Admin-Token': document.getElementById('adminToken').value }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             if (!res.ok) { container.innerHTML = '<p style="color:red;">Failed to load.</p>'; return; }
             const entries = await res.json();
@@ -474,7 +830,7 @@
             }
             container.innerHTML = `
                 <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
-                    <thead><tr style="color:#00d4ff;">
+                    <thead><tr style="color:var(--cyan);">
                         <th style="text-align:left;padding:6px;">In-Game Name</th>
                         <th style="text-align:left;padding:6px;">→ Canonical Player</th>
                         <th></th>
@@ -482,9 +838,9 @@
                     <tbody>${entries.map(e => `
                         <tr style="border-top:1px solid #333;">
                             <td style="padding:6px;color:#fff;">${e.ingame}</td>
-                            <td style="padding:6px;color:#2bc97e;">${e.player}</td>
+                            <td style="padding:6px;color:var(--green);">${e.player}</td>
                             <td style="padding:6px;">
-                                <button onclick="removeAlias('${e.ingame.replace(/'/g,"\\'")}')" style="background:#ff4655;color:white;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Remove</button>
+                                <button onclick="removeAlias('${e.ingame.replace(/'/g,"\\'")}')" class="btn-del" style="width:auto;padding:3px 8px;font-size:0.8rem;">Remove</button>
                             </td>
                         </tr>`).join('')}
                     </tbody>
@@ -497,9 +853,8 @@
 
         async function loadPremierMatches() {
             const sel = document.getElementById('matchSelector');
-            const token = document.getElementById('adminToken').value;
             const res = await fetch(`${getApiBase()}/api/admin/premier/matches`, {
-                headers: { 'X-Admin-Token': token }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             if (!res.ok) { document.getElementById('reassignStatusMsg').innerText = 'Failed to load matches.'; return; }
             _currentMatches = await res.json();
@@ -511,7 +866,7 @@
             dl.innerHTML = [...seen].sort().map(v => `<option value="${v.replace(/"/g,'&quot;')}">`).join('');
 
             const res2 = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
-                headers: { 'X-Admin-Token': token }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             _allReassignments = res2.ok ? await res2.json() : [];
 
@@ -533,8 +888,8 @@
             _allReassignments.filter(r => r.match_id === matchId).forEach(r => { reassignMap[r.ingame] = r.player; });
 
             panel.innerHTML = `
-                <div style="background:#1a1a2e;padding:14px;border-radius:6px;">
-                    <strong style="color:#00d4ff;">Players in this match</strong>
+                <div style="background:#0f1116;border:1px solid #2a2e38;padding:14px;border-radius:6px;">
+                    <strong style="color:var(--cyan);">Players in this match</strong>
                     <p style="color:#888;font-size:0.8rem;margin:4px 0 12px;">Assign an in-game name to a team player for this match only.</p>
                     ${match.players.map(p => {
                         const current = reassignMap[p.full];
@@ -543,11 +898,11 @@
                         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                             <span style="color:#fff;min-width:180px;">${p.full}</span>
                             ${current
-                                ? `<span style="color:#2bc97e;">→ ${current}</span>
-                                   <button onclick="removeReassignment('${esc(matchId)}','${esc(p.full)}')" style="background:#ff4655;color:white;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Remove</button>`
+                                ? `<span style="color:var(--green);">→ ${current}</span>
+                                   <button onclick="removeReassignment('${esc(matchId)}','${esc(p.full)}')" class="btn-del" style="width:auto;padding:3px 8px;font-size:0.8rem;">Remove</button>`
                                 : `<span style="color:#555;">→ (no override)</span>
                                    <input type="text" placeholder="Assign to player..." style="flex:1;min-width:140px;padding:5px;margin:0;" id="ri_${CSS.escape(p.full)}" list="rosterSuggestions">
-                                   <button onclick="addReassignment('${esc(matchId)}','${esc(p.full)}',document.getElementById('ri_'+CSS.escape('${esc(p.full)}')).value)" style="background:#00d4ff;color:#000;padding:3px 8px;width:auto;margin:0;font-size:0.8rem;">Assign</button>`
+                                   <button onclick="addReassignment('${esc(matchId)}','${esc(p.full)}',document.getElementById('ri_'+CSS.escape('${esc(p.full)}')).value)" style="width:auto;padding:3px 8px;font-size:0.8rem;">Assign</button>`
                             }
                         </div>`;
                     }).join('')}
@@ -560,7 +915,7 @@
             if (!player) { msg.style.color='red'; msg.innerText='Player name cannot be empty.'; return; }
             const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ match_id: matchId, ingame, player })
             });
             const result = await res.json();
@@ -573,7 +928,7 @@
             const msg = document.getElementById('reassignStatusMsg');
             const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
                 method: 'DELETE',
-                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': document.getElementById('adminToken').value },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
                 body: JSON.stringify({ match_id: matchId, ingame })
             });
             const result = await res.json();
@@ -584,7 +939,7 @@
 
         async function refreshReassignPanel(matchId) {
             const res = await fetch(`${getApiBase()}/api/admin/premier/reassignments`, {
-                headers: { 'X-Admin-Token': document.getElementById('adminToken').value }
+                headers: { 'X-Admin-Token': adminToken() }
             });
             _allReassignments = res.ok ? await res.json() : [];
             onMatchSelected();

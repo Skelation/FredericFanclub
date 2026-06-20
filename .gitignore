@@ -26,6 +26,11 @@ Thumbs.db
 
 frontend/images/cards
 
+# Profile banner PNGs are deployed like cards (not committed); keep the README
+frontend/images/banners/*.png
+frontend/images/banners/*.jpg
+frontend/images/banners/*.webp
+
 CLAUDE.md
 
 docker-compose.yml
