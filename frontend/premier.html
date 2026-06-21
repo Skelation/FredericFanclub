@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Premier Tracker | Frederic Fanclub</title>
     <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/premier.css">
+    <link rel="stylesheet" href="css/premier.css?v=playoffs1">
 </head>
 <body>
     <div class="bg-waves" aria-hidden="true"></div>
@@ -41,6 +41,30 @@
     </header>
 
     <main class="container">
+        <!-- ══════════════════════════════════════════════════════════════
+             TEMPORARY: PLAYOFFS CHAMPION ANNOUNCEMENT
+             Remove this whole <section> + the "Récap de la saison" block
+             below when the next season starts.
+        ══════════════════════════════════════════════════════════════ -->
+        <section class="playoff-announce fade-in" id="playoffAnnounce">
+            <div class="pa-glow" aria-hidden="true"></div>
+            <div class="pa-trophy">🏆</div>
+            <div class="pa-kicker">Premier · Playoffs</div>
+            <h2 class="pa-title">CHAMPIONS DES PLAYOFFS</h2>
+            <p class="pa-sub">FRED remporte les playoffs&nbsp;! Félicitations à toute l'équipe pour ce parcours et cette saison historique.</p>
+
+            <div class="pa-bracket-label">Parcours en playoffs</div>
+            <div class="playoff-bracket" id="playoffBracket">
+                <div class="po-empty">Chargement du parcours…</div>
+            </div>
+        </section>
+
+        <!-- ══ SEASON RECAP (temporary — season finished) ══ -->
+        <div class="section-heading">Récap de la saison <span>Saison terminée</span></div>
+        <div class="season-recap" id="seasonRecap">
+            <div class="sr-loading">Chargement du récap…</div>
+        </div>
+
         <!-- ══ 0. TEAM OVERVIEW ══ -->
         <div class="section-heading">Vue d'ensemble <span>Saison actuelle</span></div>
         <div class="team-overview-banner" id="teamOverviewBanner"></div>
@@ -98,6 +122,6 @@
         </div>
     </main>
     <script src="js/site.js?v=premier"></script>
-    <script src="js/premier.js?v=premier"></script>
+    <script src="js/premier.js?v=playoffs1"></script>
 </body>
 </html>

@@ -329,10 +329,138 @@ async function loadPremierMatches() {
                 </div>
             </div>`;
         });
+
+        // Temporary playoffs announcement — fill the bracket + season recap
+        renderPlayoffBracket();
+        renderSeasonRecap();
     } catch (e) {
         console.error(e);
         listDiv.innerHTML = `<div class="loader" style="color: red;">Error loading matches.</div>`;
     }
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TEMPORARY — PLAYOFFS CHAMPION ANNOUNCEMENT (bracket + season recap)
+// Remove this block (and the markup/CSS) when the next season starts.
+// ══════════════════════════════════════════════════════════════════════════
+
+// Roster-based outcome detection, mirrors the logic used to render match cards.
+function ann_analyzeMatch(matchObj) {
+    const m = matchObj.match || matchObj;
+    const meta = m.metadata || {};
+    const roster = ["heri", "themistered", "graussbyt", "lal6s9gne", "hhj", "riboox"];
+    const allP = m.players.all_players || m.players || [];
+
+    let blue = 0, red = 0;
+    allP.forEach(p => {
+        const n = (p.name || '').toLowerCase();
+        if (roster.some(r => n.includes(r))) {
+            const t = p.team || p.team_id;
+            if (t === 'Blue') blue++; else if (t === 'Red') red++;
+        }
+    });
+    const myId = red > blue ? 'Red' : 'Blue';
+    const enemyId = myId === 'Red' ? 'Blue' : 'Red';
+
+    let myRounds = 0, enemyRounds = 0, won = false, enemyName = 'Adversaire';
+    if (Array.isArray(m.teams)) {
+        const mt = m.teams.find(t => t.team_id === myId);
+        const et = m.teams.find(t => t.team_id === enemyId);
+        if (mt) { myRounds = mt.rounds_won; won = mt.won; }
+        if (et) { enemyRounds = et.rounds_won; enemyName = extractTeamName(et, enemyName); }
+    } else if (m.teams) {
+        const mt = m.teams[myId.toLowerCase()];
+        const et = m.teams[enemyId.toLowerCase()];
+        if (mt) { myRounds = mt.rounds_won; won = mt.has_won; }
+        if (et) { enemyRounds = et.rounds_won; enemyName = extractTeamName(et, enemyName); }
+    }
+    return { won, myRounds, enemyRounds, enemyName, map: meta.map || '', date: new Date((meta.game_start || 0) * 1000) };
+}
+
+function renderPlayoffBracket() {
+    const wrap = document.getElementById('playoffBracket');
+    if (!wrap) return;
+    const all = window.premierMatchesData || [];
+    if (!all.length) { wrap.innerHTML = `<div class="po-empty">Parcours indisponible.</div>`; return; }
+
+    // Most recent first in the data → take last 3 games, show oldest → newest (final last).
+    const games = all.slice(0, 3).map(ann_analyzeMatch).reverse();
+    const allLabels = ['Quarts de finale', 'Demi-finale', 'Finale'];
+    const labels = allLabels.slice(allLabels.length - games.length);
+
+    const nodes = games.map((g, i) => {
+        const cls = g.won ? 'win' : 'loss';
+        const fredWin = g.won ? 'po-winner' : '';
+        const enemyWin = g.won ? '' : 'po-winner';
+        return `
+            <div class="po-node ${cls}">
+                <div class="po-round">${labels[i] || 'Match'}</div>
+                <div class="po-match">
+                    <div class="po-team po-fred ${fredWin}">
+                        <span class="po-tname">FRED</span>
+                        <span class="po-tscore">${g.myRounds}</span>
+                    </div>
+                    <div class="po-team ${enemyWin}">
+                        <span class="po-tname">${g.enemyName}</span>
+                        <span class="po-tscore">${g.enemyRounds}</span>
+                    </div>
+                </div>
+                <div class="po-result ${cls}">${g.won ? 'Victoire' : 'Défaite'}</div>
+                ${g.map ? `<div class="po-map">${g.map}</div>` : ''}
+            </div>`;
+    });
+
+    wrap.innerHTML = nodes.join(`<div class="po-connector">→</div>`) +
+        `<div class="po-connector">→</div><div class="po-trophy-end">🏆<span>Titre</span></div>`;
+}
+
+function renderSeasonRecap() {
+    const el = document.getElementById('seasonRecap');
+    if (!el) return;
+    const all = (window.premierMatchesData || []).map(ann_analyzeMatch);
+    if (!all.length) { el.innerHTML = `<div class="sr-loading">Récap indisponible.</div>`; return; }
+
+    const wins = all.filter(g => g.won).length;
+    const losses = all.length - wins;
+    const wr = Math.round(wins / all.length * 100);
+
+    // Best map by win rate (min 1 game), from this season's games.
+    const mapAgg = {};
+    all.forEach(g => {
+        if (!g.map) return;
+        (mapAgg[g.map] = mapAgg[g.map] || { w: 0, t: 0 });
+        mapAgg[g.map].t++; if (g.won) mapAgg[g.map].w++;
+    });
+    let bestMap = null;
+    Object.entries(mapAgg).forEach(([name, s]) => {
+        const rate = s.w / s.t;
+        if (!bestMap || rate > bestMap.rate || (rate === bestMap.rate && s.t > bestMap.t)) {
+            bestMap = { name, rate, w: s.w, t: s.t };
+        }
+    });
+
+    // Longest win streak across the season (match order is consistent).
+    let longestStreak = 0, run = 0;
+    all.forEach(g => { run = g.won ? run + 1 : 0; if (run > longestStreak) longestStreak = run; });
+
+    // Total rounds won across the season.
+    const roundsWon = all.reduce((sum, g) => sum + (g.myRounds || 0), 0);
+
+    const cards = [
+        `<div class="sr-stat"><div class="sr-stat-val gold">CHAMPIONS</div><div class="sr-stat-lbl">Playoffs</div><div class="sr-stat-sub">Saison terminée</div></div>`,
+        `<div class="sr-stat"><div class="sr-stat-val green">${wins}<span style="color:rgba(200,216,240,.25)">–</span><span style="color:var(--red)">${losses}</span></div><div class="sr-stat-lbl">Bilan</div><div class="sr-stat-sub">${all.length} matchs joués</div></div>`,
+        `<div class="sr-stat"><div class="sr-stat-val cyan">${wr}%</div><div class="sr-stat-lbl">Taux de victoire</div><div class="sr-stat-sub">sur la saison</div></div>`,
+    ];
+    if (bestMap) {
+        cards.push(`<div class="sr-stat"><div class="sr-stat-val">${bestMap.name}</div><div class="sr-stat-lbl">Meilleure map</div><div class="sr-stat-sub">${bestMap.w}V — ${bestMap.t - bestMap.w}D</div></div>`);
+    }
+    cards.push(`<div class="sr-stat"><div class="sr-stat-val gold">${longestStreak}</div><div class="sr-stat-lbl">Plus longue série</div><div class="sr-stat-sub">victoires d'affilée</div></div>`);
+    cards.push(`<div class="sr-stat"><div class="sr-stat-val cyan">${roundsWon}</div><div class="sr-stat-lbl">Rounds gagnés</div><div class="sr-stat-sub">sur la saison</div></div>`);
+
+    el.innerHTML = `
+        <div class="sr-grid">${cards.join('')}</div>
+        <div class="sr-note">Une saison qui se conclut par une victoire du bracket en Advanced 3&nbsp;: ${wins} victoires, un parcours en playoffs maîtrisé et un trophée au bout. Merci à toute la team FRED et ses supporters — rendez-vous la saison prochaine&nbsp;!</div>
+    `;
 }
 
 function startCountdown() {
