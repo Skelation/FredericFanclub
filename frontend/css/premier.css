@@ -223,6 +223,7 @@
         .match-card.upcoming::after { content:''; }
 
         .match-summary { display: grid; grid-template-columns: 90px 1fr 200px 1fr 90px; align-items: center; padding: 1rem 2rem 1rem 1.5rem; gap: 1rem; width: 100%; }
+        .match-summary.has-map-banner { background-size: cover; background-position: center 30%; background-repeat: no-repeat; }
         .match-date { font-family: var(--font-hd); font-size: .6rem; letter-spacing: .1em; color: var(--cyan-dim); line-height: 1.6; }
         .match-date span { display: block; font-size: .75rem; color: var(--text); }
         .team-info { display: flex; align-items: center; gap: .75rem; }
@@ -274,7 +275,14 @@
         .player-name { display: flex; align-items: center; gap: .6rem; }
         .player-avatar { width: 28px; height: 28px; border-radius: 4px; background: linear-gradient(135deg, var(--cyan-dim), rgba(0,80,120,.8)); display: flex; align-items: center; justify-content: center; font-family: var(--font-hd); font-size: .55rem; font-weight: 900; color: #fff; flex-shrink: 0; }
         .agent-badge { font-family: var(--font-bd); font-size: .65rem; color: var(--cyan-dim); background: rgba(0,212,255,.07); border-radius: 3px; padding: .1rem .35rem; }
+        .rank-badge { font-family: var(--font-hd); font-size: .55rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; background: rgba(255,255,255,.04); border: 1px solid currentColor; border-radius: 3px; padding: .12rem .4rem; white-space: nowrap; }
+        .player-avatar.agent-avatar { object-fit: cover; background: rgba(0,212,255,.06); border: 1px solid var(--border); }
+        .rank-icon { width: 30px; height: 30px; object-fit: contain; vertical-align: middle; filter: drop-shadow(0 1px 3px rgba(0,0,0,.5)); }
+        .player-table td:has(.rank-icon) { padding-top: .35rem; padding-bottom: .35rem; }
         .stat-acs { color: var(--gold); }
+        .stat-adr { color: var(--cyan); }
+        .stat-fb { color: var(--green); }
+        .stat-fd { color: var(--red); }
         .stat-mvp { color: var(--gold); font-size: .6rem; letter-spacing: .1em; }
         td.stat-kd-pos { color: var(--green); }
         td.stat-kd-neg { color: var(--red); }

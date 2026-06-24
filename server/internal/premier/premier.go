@@ -25,6 +25,64 @@ var teamRoster = []string{
 	"小胖子vincent#4397",
 }
 
+// injectFirstBloods derives per-player first-blood / first-death counts from the
+// match kill feed and writes them onto each player as first_bloods / first_deaths.
+// Must run BEFORE the kills array is stripped. The earliest kill in each round is a
+// first blood for the killer and a first death for the victim.
+func injectFirstBloods(m map[string]interface{}) {
+	killsRaw, ok := m["kills"].([]interface{})
+	if !ok {
+		return
+	}
+	type firstKill struct {
+		killer, victim string
+		t              float64
+		set            bool
+	}
+	roundFirst := map[float64]firstKill{}
+	for _, kr := range killsRaw {
+		k, ok := kr.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		round, _ := k["round"].(float64)
+		t, _ := k["kill_time_in_round"].(float64)
+		killer, _ := k["killer_puuid"].(string)
+		victim, _ := k["victim_puuid"].(string)
+		if prev, exists := roundFirst[round]; !exists || !prev.set || t < prev.t {
+			roundFirst[round] = firstKill{killer: killer, victim: victim, t: t, set: true}
+		}
+	}
+	fb := map[string]int{}
+	fd := map[string]int{}
+	for _, e := range roundFirst {
+		if e.killer != "" {
+			fb[e.killer]++
+		}
+		if e.victim != "" {
+			fd[e.victim]++
+		}
+	}
+
+	players, ok := m["players"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	all, ok := players["all_players"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, pr := range all {
+		p, ok := pr.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		puuid, _ := p["puuid"].(string)
+		p["first_bloods"] = fb[puuid]
+		p["first_deaths"] = fd[puuid]
+	}
+}
+
 // StartPremierPoller runs in the background to fetch Premier matches and save them to disk
 func StartPremierPoller(base, matchPath, apiKey string) {
 	rosterToCheck := []struct {
@@ -130,6 +188,9 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 				mBytes, _ := json.Marshal(originalMatch)
 				var liteMatch map[string]interface{}
 				json.Unmarshal(mBytes, &liteMatch)
+
+				// Derive first bloods/deaths while the kill feed is still present.
+				injectFirstBloods(liteMatch)
 
 				// Strip the heavy stuff
 				delete(liteMatch, "rounds")

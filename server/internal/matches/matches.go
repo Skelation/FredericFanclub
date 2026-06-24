@@ -29,6 +29,84 @@ func GetCachedData() []byte {
 	return cachedMatchesData
 }
 
+// injectFirstBloods derives per-player first-blood / first-death counts from the
+// match kill feed and writes them onto each player as first_bloods / first_deaths.
+// Must run BEFORE the kills array is stripped from the served payload. The earliest
+// kill in each round is a first blood for the killer and a first death for the victim
+// (same definition as the premier stats module).
+func injectFirstBloods(m map[string]interface{}) {
+	killsRaw, ok := m["kills"].([]interface{})
+	if !ok {
+		return
+	}
+	type firstKill struct {
+		killer, victim string
+		t              float64
+		set            bool
+	}
+	roundFirst := map[float64]firstKill{}
+	for _, kr := range killsRaw {
+		k, ok := kr.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		round, _ := k["round"].(float64)
+		t, _ := k["kill_time_in_round"].(float64)
+		killer, _ := k["killer_puuid"].(string)
+		victim, _ := k["victim_puuid"].(string)
+		if prev, exists := roundFirst[round]; !exists || !prev.set || t < prev.t {
+			roundFirst[round] = firstKill{killer: killer, victim: victim, t: t, set: true}
+		}
+	}
+	fb := map[string]int{}
+	fd := map[string]int{}
+	for _, e := range roundFirst {
+		if e.killer != "" {
+			fb[e.killer]++
+		}
+		if e.victim != "" {
+			fd[e.victim]++
+		}
+	}
+
+	players, ok := m["players"].(map[string]interface{})
+	if !ok {
+		return
+	}
+	all, ok := players["all_players"].([]interface{})
+	if !ok {
+		return
+	}
+	for _, pr := range all {
+		p, ok := pr.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		puuid, _ := p["puuid"].(string)
+		p["first_bloods"] = fb[puuid]
+		p["first_deaths"] = fd[puuid]
+	}
+}
+
+// playersHaveFirstBloods reports whether a (stripped) cached match already carries
+// the injected first_bloods field — used to decide if an older entry needs a backfill.
+func playersHaveFirstBloods(m map[string]interface{}) bool {
+	players, ok := m["players"].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	all, ok := players["all_players"].([]interface{})
+	if !ok || len(all) == 0 {
+		return false
+	}
+	p, ok := all[0].(map[string]interface{})
+	if !ok {
+		return false
+	}
+	_, has := p["first_bloods"]
+	return has
+}
+
 func StartMatchPoller(base, matchPath, apiKey string) {
 	roster := []struct{ Name, Tag string }{
 		{"TheMisterED", "0007"},
@@ -125,6 +203,9 @@ func StartMatchPoller(base, matchPath, apiKey string) {
 								os.WriteFile(archivePath, fatBytes, 0644)
 							}
 
+							// Derive first bloods/deaths while the kill feed is still present.
+							injectFirstBloods(m)
+
 							delete(m, "rounds")
 							delete(m, "kills")
 							delete(m, "events")
@@ -137,6 +218,9 @@ func StartMatchPoller(base, matchPath, apiKey string) {
 									RrByPlayer: make(map[string]int),
 								}
 								monthlyMatches[matchID] = entry
+							} else if !playersHaveFirstBloods(entry.Match) {
+								// Backfill matches cached before first bloods were tracked.
+								entry.Match = m
 							}
 
 							found := false

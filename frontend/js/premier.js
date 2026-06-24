@@ -262,8 +262,30 @@ async function loadPremierMatches() {
                 }
             }
 
+            // Extra stat availability (mirrors the roster match tab). Rank/agent come
+            // from site.js helpers; ADR/FB/FD only show when the data backs them.
+            const hasADR = allPlayers.some(p => typeof p.damage_made === 'number' && p.damage_made > 0);
+            const fbByPuuid = {}, fdByPuuid = {};
+            let hasFBFD = false;
+            for (const p of allPlayers) {
+                if (typeof p.first_bloods === 'number' || typeof p.first_deaths === 'number') {
+                    hasFBFD = true;
+                    if (p.puuid) {
+                        fbByPuuid[p.puuid] = p.first_bloods || 0;
+                        fdByPuuid[p.puuid] = p.first_deaths || 0;
+                    }
+                }
+            }
+            const headCells = ['Joueur', 'ACS'];
+            if (hasADR) headCells.push('ADR');
+            headCells.push('K', 'D', 'A', 'K/D');
+            if (hasFBFD) headCells.push('FB', 'FD');
+            headCells.push('HS%', 'Freddo');
+            const colCount = headCells.length;
+            const headerHTML = headCells.map(h => `<th>${h}</th>`).join('');
+
             const renderRows = (players, label) => {
-                let html = `<tr><td colspan="9" class="team-divider">— ${label} —</td></tr>`;
+                let html = `<tr><td colspan="${colCount}" class="team-divider">— ${label} —</td></tr>`;
                 players.forEach(p => {
                     const s = p.stats;
                     const acs = Math.round(s.score / roundsPlayed);
@@ -275,20 +297,33 @@ async function loadPremierMatches() {
                     const fs = calcMatchFreddoScore(s.kills, s.deaths, s.assists, s.score, s.headshots, s.bodyshots, s.legshots, roundsPlayed);
                     const ft = getFreddoTier(fs);
 
+                    const agent = p.character || '—';
+                    const aImg = agentImg(agent);
+                    const avatar = aImg
+                        ? `<img class="player-avatar agent-avatar" src="${aImg}" alt="${escapeHtml(agent)}" title="${escapeHtml(agent)}" loading="lazy">`
+                        : `<div class="player-avatar">${escapeHtml(initials)}</div>`;
+                    const adrCell = hasADR
+                        ? `<td class="stat-adr">${roundsPlayed > 0 ? Math.round((p.damage_made || 0) / roundsPlayed) : 0}</td>`
+                        : '';
+                    const fbFdCells = hasFBFD
+                        ? `<td class="stat-fb">${fbByPuuid[p.puuid] || 0}</td><td class="stat-fd">${fdByPuuid[p.puuid] || 0}</td>`
+                        : '';
+
                     html += `
                     <tr>
                         <td>
                             <div class="player-name">
-                                <div class="player-avatar">${initials}</div>
-                                ${p.name} ${isMvp ? '<span class="stat-mvp">★ MVP</span>' : ''}
+                                ${avatar}
+                                ${escapeHtml(p.name)} ${isMvp ? '<span class="stat-mvp">★ MVP</span>' : ''}
                             </div>
                         </td>
-                        <td><span class="agent-badge">${p.character}</span></td>
                         <td class="stat-acs">${acs}</td>
+                        ${adrCell}
                         <td>${s.kills}</td>
                         <td>${s.deaths}</td>
                         <td>${s.assists}</td>
                         <td class="${kd >= 1 ? 'stat-kd-pos' : 'stat-kd-neg'}">${kd}</td>
+                        ${fbFdCells}
                         <td>${hsPct}%</td>
                         <td class="stat-fred-cell"><span class="fred-tier-badge" style="color:${ft.color}">${ft.tier}</span><span class="fred-score-num">${fs}</span></td>
                     </tr>`;
@@ -319,7 +354,7 @@ async function loadPremierMatches() {
                     </div>
                     <div class="stats-panel tab-scoreboard active">
                         <table class="player-table">
-                                <thead><tr><th>Joueur</th><th>Agent</th><th>ACS</th><th>K</th><th>D</th><th>A</th><th>K/D</th><th>HS%</th><th>Freddo</th></tr></thead>
+                                <thead><tr>${headerHTML}</tr></thead>
                             <tbody>
                                 ${scoreboardHtml}
                             </tbody>

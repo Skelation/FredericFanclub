@@ -702,6 +702,78 @@ function getRosterPlayerStats(match, playerName) {
     return { kills, deaths, assists, acs, hsPct, kd, agent };
 }
 
+// --- VALORANT ASSET HELPERS ---
+const VAL_IMG_BASE = 'images/valorant';
+
+// Henrik currenttier int → patched label (fallback when currenttier_patched absent)
+function rankLabelFromTier(tierId) {
+    if (typeof tierId !== 'number' || tierId < 3) return '';
+    if (tierId >= 27) return 'Radiant';
+    const tiers = ['Iron', 'Bronze', 'Silver', 'Gold', 'Platinum', 'Diamond', 'Ascendant', 'Immortal'];
+    const idx = Math.floor((tierId - 3) / 3); // 3-5→0 … 24-26→7
+    const div = ((tierId - 3) % 3) + 1;        // 1..3
+    return tiers[idx] ? `${tiers[idx]} ${div}` : '';
+}
+
+// Reads a player's competitive rank from the Henrik match payload and returns a
+// display label, tier color, and rank badge image path. Handles both the flat
+// (currenttier / currenttier_patched) and nested (tier.name / tier.id) shapes.
+function valorantRankInfo(p) {
+    if (!p) return { label: '—', color: 'rgba(200,216,240,.35)', img: '' };
+
+    let tierId = (typeof p.currenttier === 'number' ? p.currenttier : null);
+    if (tierId === null && p.tier && typeof p.tier.id === 'number') tierId = p.tier.id;
+
+    let label = p.currenttier_patched
+        || (p.tier && (p.tier.name || p.tier.patched))
+        || rankLabelFromTier(tierId)
+        || '';
+    label = String(label || '').trim();
+
+    if (!label || label.toLowerCase() === 'unranked' || label.toLowerCase() === 'unrated') {
+        return { label: 'Unranked', color: 'rgba(200,216,240,.35)', img: `${VAL_IMG_BASE}/ranks/Unranked.webp` };
+    }
+
+    // Tier color bands (Henrik currenttier int: 3-5 Iron … 27 Radiant)
+    const COLORS = {
+        iron: '#8a8f99', bronze: '#cd7f32', silver: '#c0cdd6', gold: '#ffd94a',
+        platinum: '#34d6c8', diamond: '#b982ff', ascendant: '#2bc97e',
+        immortal: '#ff4655', radiant: '#ffea82',
+    };
+    let key = '';
+    if (tierId !== null) {
+        if (tierId >= 27) key = 'radiant';
+        else if (tierId >= 24) key = 'immortal';
+        else if (tierId >= 21) key = 'ascendant';
+        else if (tierId >= 18) key = 'diamond';
+        else if (tierId >= 15) key = 'platinum';
+        else if (tierId >= 12) key = 'gold';
+        else if (tierId >= 9) key = 'silver';
+        else if (tierId >= 6) key = 'bronze';
+        else key = 'iron';
+    } else {
+        key = label.toLowerCase().split(' ')[0];
+    }
+
+    // Filename: "Gold 2" → Gold_2_Rank.webp, "Radiant" → Radiant_Rank.webp
+    const img = `${VAL_IMG_BASE}/ranks/${label.replace(/\s+/g, '_')}_Rank.webp`;
+    return { label, color: COLORS[key] || '#c8d8f0', img };
+}
+
+// Agent splash/icon path. Strips non-alphanumerics so "KAY/O" → KAYO.webp.
+function agentImg(character) {
+    const c = String(character || '').trim();
+    if (!c || c === '—') return '';
+    return `${VAL_IMG_BASE}/agents/${c.replace(/[^A-Za-z0-9]/g, '')}.webp`;
+}
+
+// Map banner path. "Ascent" → maps/Ascent.webp (only the 12 shipped maps exist).
+function mapImg(mapName) {
+    const m = String(mapName || '').trim();
+    if (!m || m.toLowerCase() === 'unknown map') return '';
+    return `${VAL_IMG_BASE}/maps/${m.replace(/[^A-Za-z0-9]/g, '')}.webp`;
+}
+
 // --- MATCH UI RENDERER (FINAL RR FIX) ---
 function renderRosterMatchRow(entry, selectedSet) {
     const matchData = entry.match || {};
@@ -814,6 +886,47 @@ function renderRosterMatchRow(entry, selectedSet) {
     }, 1);
     const roundCount = (matchData.metadata?.rounds_played > 0 ? matchData.metadata.rounds_played : 1);
 
+    // First-blood / first-death per player (puuid → count). The initial roster feed
+    // strips the kill array but ships server-computed first_bloods / first_deaths on
+    // each player; the load-more feed ships raw matches with the kill array instead.
+    // Prefer the precomputed fields, otherwise derive from the kill feed.
+    const fbByPuuid = {};
+    const fdByPuuid = {};
+    let hasFBFD = false;
+    for (const p of allPlayers) {
+        if (typeof p.first_bloods === 'number' || typeof p.first_deaths === 'number') {
+            hasFBFD = true;
+            if (p.puuid) {
+                fbByPuuid[p.puuid] = p.first_bloods || 0;
+                fdByPuuid[p.puuid] = p.first_deaths || 0;
+            }
+        }
+    }
+    if (!hasFBFD && Array.isArray(matchData.kills) && matchData.kills.length) {
+        const roundFirst = {};
+        for (const k of matchData.kills) {
+            const prev = roundFirst[k.round];
+            if (!prev || (k.kill_time_in_round || 0) < (prev.kill_time_in_round || 0)) {
+                roundFirst[k.round] = k;
+            }
+        }
+        for (const k of Object.values(roundFirst)) {
+            if (k.killer_puuid) fbByPuuid[k.killer_puuid] = (fbByPuuid[k.killer_puuid] || 0) + 1;
+            if (k.victim_puuid) fdByPuuid[k.victim_puuid] = (fdByPuuid[k.victim_puuid] || 0) + 1;
+        }
+        hasFBFD = true;
+    }
+    // Only show the ADR column when the data actually backs it.
+    const hasADR = allPlayers.some(p => typeof p.damage_made === 'number' && p.damage_made > 0);
+
+    const headCells = ['Joueur', 'Rang', 'ACS'];
+    if (hasADR) headCells.push('ADR');
+    headCells.push('K', 'D', 'A', 'K/D');
+    if (hasFBFD) headCells.push('FB', 'FD');
+    headCells.push('HS%');
+    const colCount = headCells.length;
+    const headerHTML = headCells.map(h => `<th>${h}</th>`).join('');
+
     function buildPlayerRow(p) {
         const s = p.stats || {};
         const kills = s.kills || 0;
@@ -828,14 +941,30 @@ function renderRosterMatchRow(entry, selectedSet) {
         const name = p.name || p.gameName || '—';
         const initials = String(name).slice(0, 2).toUpperCase();
         const isRoster = rosterNames.has(String(name).toLowerCase());
+        const rank = valorantRankInfo(p);
+        const aImg = agentImg(agent);
+        const avatar = aImg
+            ? `<img class="player-avatar agent-avatar" src="${aImg}" alt="${escapeHtml(agent)}" title="${escapeHtml(agent)}" loading="lazy">`
+            : `<div class="player-avatar">${escapeHtml(initials)}</div>`;
+        const rankCell = rank.img
+            ? `<img class="rank-icon" src="${rank.img}" alt="${escapeHtml(rank.label)}" title="${escapeHtml(rank.label)}" loading="lazy">`
+            : `<span class="rank-badge" style="color:${rank.color}" title="${escapeHtml(rank.label)}">—</span>`;
+        const adrCell = hasADR
+            ? `<td class="stat-adr">${roundCount > 0 ? Math.round((p.damage_made || 0) / roundCount) : 0}</td>`
+            : '';
+        const fbFdCells = hasFBFD
+            ? `<td class="stat-fb">${fbByPuuid[p.puuid] || 0}</td><td class="stat-fd">${fdByPuuid[p.puuid] || 0}</td>`
+            : '';
         return `<tr${isRoster ? ' class="roster-highlight"' : ''}>
-            <td><div class="player-name"><div class="player-avatar">${escapeHtml(initials)}</div>${escapeHtml(name)}</div></td>
-            <td><span class="agent-badge">${escapeHtml(agent)}</span></td>
+            <td><div class="player-name">${avatar}${escapeHtml(name)}</div></td>
+            <td>${rankCell}</td>
             <td class="stat-acs">${acs}</td>
+            ${adrCell}
             <td>${kills}</td>
             <td>${deaths}</td>
             <td>${assists}</td>
             <td class="${kdClass}">${kd}</td>
+            ${fbFdCells}
             <td>${hsPct}%</td>
         </tr>`;
     }
@@ -850,8 +979,8 @@ function renderRosterMatchRow(entry, selectedSet) {
     const fredSide = allPlayers.filter(p => p.team === fredTeam).sort((a, b) => Math.round((b.stats?.score || 0) / roundCount) - Math.round((a.stats?.score || 0) / roundCount));
     const enemySide = allPlayers.filter(p => p.team !== fredTeam).sort((a, b) => Math.round((b.stats?.score || 0) / roundCount) - Math.round((a.stats?.score || 0) / roundCount));
 
-    const fredLabel = `<tr><td colspan="8" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);background:rgba(0,212,255,.06)">Notre équipe</td></tr>`;
-    const enemyLabel = `<tr><td colspan="8" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(200,216,240,.4);background:rgba(255,70,85,.04)">Adversaires</td></tr>`;
+    const fredLabel = `<tr><td colspan="${colCount}" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:var(--cyan);background:rgba(0,212,255,.06)">Notre équipe</td></tr>`;
+    const enemyLabel = `<tr><td colspan="${colCount}" style="padding:.4rem .8rem;font-family:var(--font-hd);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;color:rgba(200,216,240,.4);background:rgba(255,70,85,.04)">Adversaires</td></tr>`;
 
     const scoreboardRows = allPlayers.length > 0
         ? fredLabel + fredSide.map(buildPlayerRow).join('') + enemyLabel + enemySide.map(buildPlayerRow).join('')
@@ -861,8 +990,12 @@ function renderRosterMatchRow(entry, selectedSet) {
     const li = document.createElement('div');
     li.className = `match-card${matchClass !== 'draw' ? ' ' + matchClass : ''}`;
     li.setAttribute('onclick', 'toggleCard(this)');
+    const mImg = mapImg(mapName);
+    const summaryStyle = mImg
+        ? ` style="background-image:linear-gradient(90deg, rgba(13,20,40,.97) 0%, rgba(13,20,40,.82) 45%, rgba(13,20,40,.92) 100%), url('${mImg}')"`
+        : '';
     li.innerHTML = `
-        <div class="match-summary">
+        <div class="match-summary${mImg ? ' has-map-banner' : ''}"${summaryStyle}>
             <div class="match-date">
                 ${escapeHtml(mapName)}
                 <span>${escapeHtml(mode)}</span>
@@ -888,8 +1021,8 @@ function renderRosterMatchRow(entry, selectedSet) {
         <div class="match-details">
             <div class="stats-panel active">
                 <table class="player-table">
-                    <thead><tr><th>Joueur</th><th>Agent</th><th>ACS</th><th>K</th><th>D</th><th>A</th><th>K/D</th><th>HS%</th></tr></thead>
-                    <tbody>${scoreboardRows || '<tr><td colspan="8" style="text-align:center;color:rgba(200,216,240,.3);padding:1rem">Aucune donnée disponible</td></tr>'}</tbody>
+                    <thead><tr>${headerHTML}</tr></thead>
+                    <tbody>${scoreboardRows || `<tr><td colspan="${colCount}" style="text-align:center;color:rgba(200,216,240,.3);padding:1rem">Aucune donnée disponible</td></tr>`}</tbody>
                 </table>
             </div>
         </div>
