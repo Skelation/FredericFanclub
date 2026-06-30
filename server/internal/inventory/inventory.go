@@ -3,10 +3,27 @@ package inventory
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"fredericfanclub/server/internal/db"
 	"fredericfanclub/server/internal/middleware"
 )
+
+// seasonNumber extracts the trailing integer from a season label such as
+// "Season 2". Legacy/empty season values return 0 so they are always treated
+// as released.
+func seasonNumber(season string) int {
+	fields := strings.Fields(season)
+	if len(fields) == 0 {
+		return 0
+	}
+	n, err := strconv.Atoi(fields[len(fields)-1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
 
 func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 	mux.HandleFunc("OPTIONS /api/inventory", func(w http.ResponseWriter, r *http.Request) {
@@ -85,6 +102,14 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 
 		userID := middleware.GetUserIDFromCookie(r)
 
+		// Cards from seasons that haven't started yet are hidden from the catalog
+		// until the active pack season reaches them.
+		var currentSeason string
+		if err := db.DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&currentSeason); err != nil {
+			currentSeason = "Season 1"
+		}
+		currentSeasonNum := seasonNumber(currentSeason)
+
 		rows, err := db.DB.Query(`
 			SELECT c.id, c.name, c.rarity, c.image_url, c.season, COALESCE(i.quantity, 0) as quantity
 			FROM cards c
@@ -119,6 +144,10 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			var item CatalogItem
 			var quantity int
 			rows.Scan(&item.ID, &item.Name, &item.Rarity, &item.ImageURL, &item.Season, &quantity)
+			// Skip cards belonging to a future (not-yet-active) season.
+			if seasonNumber(item.Season) > currentSeasonNum {
+				continue
+			}
 			item.Unlocked = quantity > 0
 			items = append(items, item)
 		}
