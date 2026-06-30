@@ -25,7 +25,7 @@ type Item struct {
 }
 
 // dailyCount is how many cosmetics each user is offered per day.
-const dailyCount = 3
+const dailyCount = 1
 
 // dailySeed returns a stable per-user, per-day seed so the rotation is random
 // across users but constant for a given user throughout a calendar day (UTC).
