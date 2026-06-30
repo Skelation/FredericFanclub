@@ -24,11 +24,20 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			return
 		}
 
+		// Only the current pack season is shown in the inventory. Cards from
+		// previous seasons remain owned (stored in the inventory table) and stay
+		// visible in the catalog, but they no longer clutter the vault.
+		var currentSeason string
+		if err := db.DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&currentSeason); err != nil {
+			currentSeason = "Season 1"
+		}
+
 		rows, err := db.DB.Query(`
 			SELECT c.id, c.name, c.rarity, c.image_url, c.season, i.quantity
 			FROM inventory i
 			JOIN cards c ON i.card_id = c.id
 			WHERE i.discord_id = ? AND i.quantity > 0
+				AND (c.season = ? OR c.season = '' OR c.season IS NULL)
 			ORDER BY
 				CASE c.rarity
 					WHEN 'radiant'   THEN 1
@@ -38,7 +47,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 					WHEN 'bronze'    THEN 5
 					WHEN 'iron'      THEN 6
 					ELSE 7
-				END, c.name ASC`, userID)
+				END, c.name ASC`, userID, currentSeason)
 		if err != nil {
 			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
 			return
