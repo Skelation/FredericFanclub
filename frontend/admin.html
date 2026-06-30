@@ -198,9 +198,10 @@
                 <option value="radiant">Radiant</option>
             </select>
             <label>Season:</label>
-            <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1">
-            <label>Image URL:</label>
-            <input type="text" id="cardImage" placeholder="/images/cards/graussbyt.png">
+            <input type="text" id="cardSeason" placeholder="e.g. Season 1" value="Season 1" oninput="updateCardImageHint()">
+            <label>Image file:</label>
+            <input type="text" id="cardImage" placeholder="graussbyt.png" oninput="updateCardImageHint()">
+            <p class="hint" id="cardImageHint" style="margin-top:4px;">Just the filename — the folder is picked from the season automatically.</p>
             <button onclick="addCard()">Add to Database</button>
             <p class="status" id="statusMsg"></p>
         </div>
@@ -211,8 +212,9 @@
             <p class="hint">Drop the PNG in <code>frontend/images/banners/</code>, then register it here. It becomes purchasable in the shop and shows on the leaderboard. Price is set by rarity.</p>
             <label>Banner Name:</label>
             <input type="text" id="bannerName" placeholder="e.g. Neon City">
-            <label>Image Path (or CSS gradient):</label>
-            <input type="text" id="bannerImage" placeholder="/images/banners/neon-city.png">
+            <label>Image file (or CSS gradient):</label>
+            <input type="text" id="bannerImage" placeholder="neon-city.png" oninput="updateBannerImageHint()">
+            <p class="hint" id="bannerImageHint" style="margin-top:4px;">Just the filename — it targets <code>/images/banners/</code> automatically. A full path or CSS gradient is used as-is.</p>
             <label>Rarity (sets price):</label>
             <select id="bannerRarity">
                 <option value="iron">Iron — 500 FT</option>
@@ -373,16 +375,52 @@
         }
         const escAttr = s => (s || '').replace(/"/g, '&quot;');
 
+        // ── Image path auto-targeting ────────────────────────────────────────
+        // Admins type just a filename; we prefix the correct folder. A value that
+        // is already a full path (/, http) or a CSS gradient/colour is left as-is.
+        function cardFolderForSeason(season) {
+            const m = (season || '').match(/(\d+)/);
+            const n = m ? parseInt(m[1], 10) : 1;
+            return n <= 1 ? 'cards' : 'cards' + n;
+        }
+        function resolveCardImage(raw, season) {
+            const v = (raw || '').trim();
+            if (!v || v.startsWith('/') || v.startsWith('http')) return v;
+            return `/images/${cardFolderForSeason(season)}/${v.replace(/^\/+/, '')}`;
+        }
+        function resolveBannerImage(raw) {
+            const v = (raw || '').trim();
+            if (!v || v.startsWith('/') || v.startsWith('http') ||
+                v.includes('gradient') || v.startsWith('#') || v.startsWith('rgb')) return v;
+            return `/images/banners/${v.replace(/^\/+/, '')}`;
+        }
+        function updateCardImageHint() {
+            const el = document.getElementById('cardImageHint');
+            const raw = document.getElementById('cardImage').value;
+            const season = document.getElementById('cardSeason').value;
+            el.innerText = raw.trim()
+                ? '→ ' + resolveCardImage(raw, season)
+                : 'Just the filename — the folder is picked from the season automatically.';
+        }
+        function updateBannerImageHint() {
+            const el = document.getElementById('bannerImageHint');
+            const raw = document.getElementById('bannerImage').value;
+            el.innerHTML = raw.trim()
+                ? '→ ' + resolveBannerImage(raw)
+                : 'Just the filename — it targets <code>/images/banners/</code> automatically. A full path or CSS gradient is used as-is.';
+        }
+
         // ── Card ─────────────────────────────────────────────────────────────
         async function addCard() {
             const msg = document.getElementById('statusMsg');
             msg.innerText = "";
             try {
+                const season = document.getElementById('cardSeason').value;
                 const data = {
                     name: document.getElementById('cardName').value,
                     rarity: document.getElementById('cardRarity').value,
-                    image_url: document.getElementById('cardImage').value,
-                    season: document.getElementById('cardSeason').value
+                    image_url: resolveCardImage(document.getElementById('cardImage').value, season),
+                    season: season
                 };
                 const response = await fetch(`${getApiBase()}/api/admin/cards`, {
                     method: 'POST',
@@ -401,6 +439,8 @@
                     msg.style.color = "lime";
                     msg.innerText = "Success! Card ID: " + result.card_id;
                     document.getElementById('cardName').value = '';
+                    document.getElementById('cardImage').value = '';
+                    updateCardImageHint();
                 } else {
                     msg.style.color = "red";
                     msg.innerText = "Error: " + (result.error || "Unknown server error");
@@ -420,7 +460,7 @@
                 const data = {
                     type: 'banner',
                     name: document.getElementById('bannerName').value,
-                    value: document.getElementById('bannerImage').value,
+                    value: resolveBannerImage(document.getElementById('bannerImage').value),
                     rarity: document.getElementById('bannerRarity').value,
                     description: document.getElementById('bannerDesc').value
                 };
@@ -436,6 +476,7 @@
                     document.getElementById('bannerName').value = '';
                     document.getElementById('bannerImage').value = '';
                     document.getElementById('bannerDesc').value = '';
+                    updateBannerImageHint();
                 } else {
                     msg.style.color = "red";
                     msg.innerText = "Error: " + (result.error || "Unknown server error");

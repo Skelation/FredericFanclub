@@ -6,6 +6,12 @@ function getApiBase() {
     return "https://api.fredericfan.club";
 }
 
+// True only on the local dev build. Used to keep work-in-progress features
+// (e.g. the Boutique/shop, hidden until Season 2 launches) out of production.
+function isDevEnv() {
+    return window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+}
+
 // Build the CSS background "layer" for a banner cosmetic. A value containing
 // "gradient(" is used as-is (a CSS gradient); anything else is treated as an
 // image path/URL (e.g. /images/banners/x.png) and wrapped so it covers the
@@ -18,6 +24,8 @@ function bannerImageCss(value) {
 // Inject the Boutique (shop) link into every page's nav so we don't have to
 // hand-edit each HTML file's hardcoded nav. Runs once the DOM is ready.
 function injectSharedNavLinks() {
+    // Shop is hidden in production until Season 2 launches — dev only for now.
+    if (!isDevEnv()) return;
     const navLinks = document.querySelector('.nav-links');
     if (!navLinks) return;
     if (!navLinks.querySelector('a[href="shop.html"]')) {

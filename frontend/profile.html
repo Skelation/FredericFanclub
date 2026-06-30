@@ -210,7 +210,10 @@
 
         function renderCosmetics(owned) {
             if (!owned.length) {
-                return `<p class="muted">Tu ne possèdes aucun cosmétique. Rends-toi à la <a href="shop.html" style="color:#00d4ff;">boutique</a> !</p>`;
+                // Boutique hidden in production until Season 2 (see isDevEnv).
+                return isDevEnv()
+                    ? `<p class="muted">Tu ne possèdes aucun cosmétique. Rends-toi à la <a href="shop.html" style="color:#00d4ff;">boutique</a> !</p>`
+                    : `<p class="muted">Tu ne possèdes aucun cosmétique.</p>`;
             }
             const byType = {};
             owned.forEach(c => { (byType[c.type] = byType[c.type] || []).push(c); });
@@ -280,7 +283,7 @@
                 ? `<div class="profile-section" style="padding-top:4px;"><h3>Bio</h3><p style="font-family:'Rajdhani',sans-serif;color:#cdd8ee;font-size:1.05rem;line-height:1.5;">${escapeHtml(p.bio)}</p></div>`
                 : '';
 
-            const editHtml = p.is_self
+            const editHtml = (p.is_self && isDevEnv())
                 ? `<div class="profile-actions"><a class="profile-edit-btn" href="shop.html">🛒 Boutique</a></div>`
                 : '';
 
