@@ -123,7 +123,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 		rows.Close()
 
 		// Dev mode: expose the whole catalog so anything can be bought for
-		// testing, instead of the daily 3-item rotation.
+		// testing, instead of the daily 1-item rotation.
 		var items []Item
 		if hub.DevMode {
 			items = all

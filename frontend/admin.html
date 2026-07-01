@@ -286,7 +286,8 @@
 
         <!-- ── Manage Cards (Delete) ────────────────────────────────── -->
         <div class="panel">
-            <h2>Manage Cards (Delete)</h2>
+            <h2>Manage Cards (Edit / Delete)</h2>
+            <p class="hint">Load the catalog, then edit a card's name or image filename and hit Save, or delete it entirely. A bare filename targets the season's folder automatically; a full path is used as-is.</p>
             <button onclick="fetchAdminCards()" style="background: var(--purple);">Load Card Catalog</button>
             <div class="filter-row" id="cardFilters" style="display:none;">
                 <input type="text" id="cardSearch" placeholder="Search name / rarity / #id…" oninput="renderAdminCards()">
@@ -719,16 +720,49 @@
                 (c.rarity || '').toLowerCase().includes(q) ||
                 String(c.id).includes(q.replace('#', '')));
             list.innerHTML = cards.length ? cards.map(c => `
-                <div style="display: flex; justify-content: space-between; align-items: center; background: #0f1116; border:1px solid #2a2e38; padding: 10px; margin-bottom: 8px; border-radius: 6px;">
-                    <div style="display: flex; align-items: center; gap: 10px;">
-                        <img src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
-                        <div>
-                            <strong style="color: white;">[#${c.id}] ${c.name}</strong><br>
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; background: #0f1116; border:1px solid #2a2e38; padding: 10px; margin-bottom: 8px; border-radius: 6px;">
+                    <div style="display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0;">
+                        <img id="cardImg_${c.id}" src="${c.image_url}" style="width: 30px; height: 42px; object-fit: cover; border-radius: 2px;">
+                        <div style="flex: 1; min-width: 0;">
+                            <span style="font-size: 0.72rem; color: #777; font-family: monospace;">#${c.id} · ${escAttr(c.season || '')}</span>
+                            <input type="text" id="cardName_${c.id}" value="${escAttr(c.name)}" placeholder="Card name" style="margin: 2px 0; padding: 6px 8px; font-size: 0.85rem;">
+                            <input type="text" id="cardImage_${c.id}" value="${escAttr(c.image_url)}" placeholder="image.png" style="margin: 0 0 2px; padding: 6px 8px; font-size: 0.8rem;">
                             <span style="font-size: 0.8rem; color: #aaa; text-transform: uppercase;">${c.rarity}</span>
                         </div>
                     </div>
-                    <button onclick="deleteCard(${c.id})" class="btn-del" style="width: auto; padding: 5px 10px; font-size: 0.9rem;">Delete</button>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        <button onclick="saveCard(${c.id})" class="btn-save" style="width: auto; padding: 5px 10px; font-size: 0.9rem;">Save</button>
+                        <button onclick="deleteCard(${c.id})" class="btn-del" style="width: auto; padding: 5px 10px; font-size: 0.9rem;">Delete</button>
+                    </div>
                 </div>`).join('') : "<p style='color: #888;'>No matches.</p>";
+        }
+
+        async function saveCard(cardId) {
+            const msg = document.getElementById('deleteStatusMsg');
+            const name = document.getElementById('cardName_' + cardId).value.trim();
+            if (!name) { msg.style.color = 'red'; msg.innerText = 'Card name cannot be empty.'; return; }
+            const card = _adminCards.find(c => c.id === cardId);
+            const rawImage = document.getElementById('cardImage_' + cardId).value.trim();
+            if (!rawImage) { msg.style.color = 'red'; msg.innerText = 'Image cannot be empty.'; return; }
+            // A bare filename gets the season's folder prefix; a full path is kept as-is.
+            const image_url = resolveCardImage(rawImage, card ? card.season : '');
+            const res = await fetch(`${getApiBase()}/api/admin/update-card`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Token': adminToken() },
+                body: JSON.stringify({ card_id: cardId, name, image_url })
+            });
+            const result = await res.json();
+            if (res.ok) {
+                msg.style.color = "lime";
+                msg.innerText = `Card #${cardId} saved.`;
+                if (card) { card.name = name; card.image_url = image_url; }
+                const img = document.getElementById('cardImg_' + cardId);
+                if (img) img.src = image_url;
+                document.getElementById('cardImage_' + cardId).value = image_url;
+            } else {
+                msg.style.color = "red";
+                msg.innerText = "Error: " + result.error;
+            }
         }
 
         async function deleteCard(cardId) {

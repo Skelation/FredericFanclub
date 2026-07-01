@@ -347,6 +347,50 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string, base, apiKey string) {
 		fmt.Fprintf(w, `{"success": true, "message": "Cosmetic deleted and un-equipped."}`)
 	})
 
+	// Update card (edit name)
+	mux.HandleFunc("OPTIONS /api/admin/update-card", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Admin-Token")
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("POST /api/admin/update-card", func(w http.ResponseWriter, r *http.Request) {
+		middleware.ApplyCORS(w, r, allowed)
+		if r.Header.Get("X-Admin-Token") != adminToken() {
+			http.Error(w, `{"error": "unauthorized"}`, http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			CardID   int    `json:"card_id"`
+			Name     string `json:"name"`
+			ImageURL string `json:"image_url"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.CardID == 0 {
+			http.Error(w, `{"error": "invalid request"}`, http.StatusBadRequest)
+			return
+		}
+		req.Name = strings.TrimSpace(req.Name)
+		req.ImageURL = strings.TrimSpace(req.ImageURL)
+		if req.Name == "" {
+			http.Error(w, `{"error": "name is required"}`, http.StatusBadRequest)
+			return
+		}
+		if req.ImageURL == "" {
+			http.Error(w, `{"error": "image_url is required"}`, http.StatusBadRequest)
+			return
+		}
+		res, err := db.DB.Exec("UPDATE cards SET name = ?, image_url = ? WHERE id = ?", req.Name, req.ImageURL, req.CardID)
+		if err != nil {
+			http.Error(w, `{"error": "database error"}`, http.StatusInternalServerError)
+			return
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			http.Error(w, `{"error": "card not found"}`, http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"success": true, "message": "Card renamed!"}`)
+	})
+
 	// Delete card
 	mux.HandleFunc("OPTIONS /api/admin/delete-card", func(w http.ResponseWriter, r *http.Request) {
 		middleware.ApplyCORS(w, r, allowed)
