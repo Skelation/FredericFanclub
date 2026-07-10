@@ -259,13 +259,19 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			return
 		}
 
+		var currentSeason string
+		if err := db.DB.QueryRow("SELECT value FROM server_config WHERE key = 'current_pack_season'").Scan(&currentSeason); err != nil {
+			currentSeason = "Season 1"
+		}
+
 		var winCardID int
 		var winName, winRarity, winImage string
 		err := tx.QueryRow(
-			"SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? ORDER BY RANDOM() LIMIT 1", nextRarity).
+			"SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? AND season = ? ORDER BY RANDOM() LIMIT 1",
+			nextRarity, currentSeason).
 			Scan(&winCardID, &winName, &winRarity, &winImage)
 		if err != nil {
-			http.Error(w, `{"error": "The database has no cards in the next tier to give you!"}`, http.StatusInternalServerError)
+			http.Error(w, `{"error": "The database has no cards in the next tier for the current season!"}`, http.StatusInternalServerError)
 			return
 		}
 
