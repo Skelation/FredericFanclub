@@ -267,8 +267,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 		var winCardID int
 		var winName, winRarity, winImage string
 		err := tx.QueryRow(
-			"SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? AND season = ? ORDER BY RANDOM() LIMIT 1",
-			nextRarity, currentSeason).
+			"SELECT id, name, rarity, image_url FROM cards WHERE rarity = ? AND season = ? ORDER BY RANDOM() LIMIT 1", nextRarity, currentSeason).
 			Scan(&winCardID, &winName, &winRarity, &winImage)
 		if err != nil {
 			http.Error(w, `{"error": "The database has no cards in the next tier for the current season!"}`, http.StatusInternalServerError)
