@@ -201,19 +201,19 @@ func Init() {
 func CosmeticPrice(rarity string) int {
 	switch rarity {
 	case "iron":
-		return 500
+		return 100
 	case "bronze":
-		return 1000
+		return 200
 	case "diamond":
-		return 2500
+		return 500
 	case "ascendant":
-		return 5000
-	case "immortal":
-		return 8000
-	case "radiant":
-		return 12000
-	default:
 		return 1000
+	case "immortal":
+		return 3000
+	case "radiant":
+		return 5000
+	default:
+		return 200
 	}
 }
 
