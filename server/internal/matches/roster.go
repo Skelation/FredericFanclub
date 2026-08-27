@@ -118,9 +118,9 @@ func defaultRosterPlayers() []riotPlayer {
 	return []riotPlayer{
 		{Name: "Heri", Tag: "BLUB"},
 		{Name: "TheMisterED", Tag: "0007"},
-		{Name: "Graussbyt", Tag: "5629"},
+		{Name: "Graussbyt", Tag: "FRED"},
 		{Name: "Lal6s9gne", Tag: "6641"},
-		{Name: "Djibはコリーヌ お あいして", Tag: "LOVE"},
+		{Name: "Djibhouuuuuu", Tag: "SQL"},
 		{Name: "hhj", Tag: "8769"},
 		{Name: "小胖子vincent", Tag: "4397"},
 		{Name: "XTrixツ", Tag: "DREAM"},

@@ -168,7 +168,7 @@ func RegisterRoutes(mux *http.ServeMux, allowed []string) {
 			targetPuuid = "381185ae-9f51-55b9-951a-215949c35e02"
 		case "hhj":
 			targetPuuid = "e1908072-8690-5298-a41c-c0eecb154bfd"
-		case "djibはコリーヌ お あいして", "djib":
+		case "djibはコリーヌ お あいして", "djib", "djibhouuuuuu":
 			targetPuuid = "00b75608-fd12-57c2-a4cf-23466ff42c71"
 		case "graussbyt":
 			targetPuuid = "8adc42f1-6806-5036-9a3e-94c07349851d"

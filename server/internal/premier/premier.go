@@ -20,8 +20,8 @@ var (
 
 // teamRoster is the canonical list of tracked players for stats generation.
 var teamRoster = []string{
-	"Heri#BLUB", "TheMisterED#0007", "Graussbyt#5629",
-	"hhj#8769", "Djibはコリーヌ お あいして#LoVe", "Lal6s9gne#6641", "Riboox",
+	"Heri#BLUB", "TheMisterED#0007", "Graussbyt#FRED",
+	"hhj#8769", "Djibhouuuuuu#SQL", "Lal6s9gne#6641", "Riboox",
 	"小胖子vincent#4397",
 }
 
@@ -91,7 +91,7 @@ func StartPremierPoller(base, matchPath, apiKey string) {
 	}{
 		{"Heri", "BLUB"},
 		{"TheMisterED", "0007"},
-		{"Graussbyt", "5629"},
+		{"Graussbyt", "FRED"},
 		{"小胖子vincent", "4397"},
 	}
 
